@@ -1151,3 +1151,43 @@ const encoded = JSON.parse(settings.planToJson(plan))
 assertEqual(encoded.schema, 1, 'planToJson stamps the schema')
 assertEqual(encoded.changes.length, 2, 'planToJson carries every change')
 assertEqual(encoded.changes[0].key, 'browser', 'planToJson keeps the plan order')
+
+// The catalog lives in JS and the writers live in bash. Nothing stops those
+// two from drifting apart except this check.
+const applyScript = fs.readFileSync(path.join(__dirname, '..', 'scripts/apply-settings.sh'), 'utf8')
+const dispatch = applyScript.slice(
+  applyScript.indexOf('while IFS= read -r key; do'),
+  applyScript.indexOf('done < <(jq -r ')
+)
+assert(dispatch.length > 0, 'apply-settings.sh has a dispatch loop')
+
+const labels = []
+for (const line of dispatch.split('\n')) {
+  const match = line.match(/^ {4}(\S[^)(]*?)\)/)
+  if (!match) continue
+  for (const part of match[1].split('|')) labels.push(part.trim())
+}
+assert(labels.indexOf('*') !== -1, 'the dispatcher refuses an unknown key')
+
+function dispatched(key) {
+  if (labels.indexOf(key) !== -1) return true
+  for (const label of labels) {
+    if (label.slice(-2) !== '.*') continue
+    if (key.indexOf(label.slice(0, -2) + '.') === 0) return true
+  }
+  return false
+}
+
+let undispatched = ''
+for (const item of catalog) {
+  if (item.importable && !dispatched(item.key)) undispatched = item.key
+}
+assertEqual(undispatched, '', 'every importable setting has a writer in apply-settings.sh')
+
+let orphanLabel = ''
+for (const label of labels) {
+  if (label === '*') continue
+  const key = label.slice(-2) === '.*' ? label.slice(0, -2) + '.gapsIn' : label
+  if (!byKey[label] && !byKey[key] && label.indexOf('.*') === -1) orphanLabel = label
+}
+assertEqual(orphanLabel, '', 'apply-settings.sh has no writer for a setting the catalog dropped')

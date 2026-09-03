@@ -642,14 +642,15 @@ function sameValue(a, b) {
   return a === b
 }
 
-// Every change the plan carries, as the argument list its writer takes.
-// The executor is `scripts/apply-settings.sh`; this keeps the shape in one
-// place so the review screen and the executor cannot disagree.
+// The plan as the executor reads it. `scripts/apply-settings.sh` takes this
+// on stdin, so the review screen and the executor cannot disagree about what
+// is being applied. Each change carries `from` as well as `value`, which is
+// what lets the executor write an undo plan before it touches anything.
 function planToJson(plan) {
   var list = (plan && plan.changes) || []
   var out = []
   for (var i = 0; i < list.length; i++) {
-    out.push({ key: list[i].key, value: list[i].to })
+    out.push({ key: list[i].key, value: list[i].to, from: list[i].from })
   }
   return JSON.stringify({ schema: SETTINGS_SCHEMA, changes: out })
 }
