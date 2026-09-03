@@ -201,6 +201,8 @@ QtObject {
   property int reminderCount: 0
   property bool reminderActive: false
   property var reminders: []
+  // The parsed snapshot, kept whole for the export page.
+  property var snapshotData: ({})
   property bool jobBusy: false
   property string jobKind: ""
   property string jobLog: ""
@@ -370,6 +372,9 @@ QtObject {
       lastError = "Could not parse Omarchy snapshot"
       return
     }
+    // The export page reads the snapshot as a whole rather than through the
+    // properties below, because it has to ask which keys are present at all.
+    snapshotData = data
     theme = String(data.theme || "")
     background = String(data.background || "")
     font = String(data.font || "")

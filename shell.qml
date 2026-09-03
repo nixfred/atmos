@@ -33,7 +33,8 @@ ShellRoot {
     { id: "idle", title: "Idle and lock", keywords: "screensaver lock timeout idle security stay awake caffeine allow disable suspend sleep branding logo ascii lid clamshell" },
     { id: "security", title: "Security", keywords: "fingerprint fido2 yubikey ssh sshd sudo passwordless docker pam u2f" },
     { id: "hooks", title: "Hooks", keywords: "hook script theme-set font-set post-boot post-update pacman battery-low" },
-    { id: "system", title: "System", keywords: "crash capture diagnostics coredump weather location city forecast coordinates latitude longitude gps units celsius fahrenheit metric imperial refresh interval about logo branding fastfetch timezone tz utc region city date time zoneinfo timedatectl hostname computer machine device name hostnamectl keyboard layout keymap xkb qwerty language input localectl ntp timesync synchronize automatic clock network time locale lang utf-8 i18n translation pacman parallel downloads packages mirrors aur full name user gecos account chfn update channel firmware orphan prune version printer cups print restore hyprland shell restart atmos git pull" }
+    { id: "system", title: "System", keywords: "crash capture diagnostics coredump weather location city forecast coordinates latitude longitude gps units celsius fahrenheit metric imperial refresh interval about logo branding fastfetch timezone tz utc region city date time zoneinfo timedatectl hostname computer machine device name hostnamectl keyboard layout keymap xkb qwerty language input localectl ntp timesync synchronize automatic clock network time locale lang utf-8 i18n translation pacman parallel downloads packages mirrors aur full name user gecos account chfn update channel firmware orphan prune version printer cups print restore hyprland shell restart atmos git pull" },
+    { id: "export", title: "Import and export", keywords: "import export backup restore settings file markdown md share declare machine profile transfer move migrate copy clone another laptop dotfiles plan dry run review undo revert apply keybindings bindings rules autostart" }
   ]
 
   function pageMatches(page, q) {
@@ -141,6 +142,7 @@ ShellRoot {
   Component { id: securityPage; SecurityPage { query: root.query } }
   Component { id: hooksPage; HooksPage { query: root.query } }
   Component { id: systemPage; SystemPage { query: root.query } }
+  Component { id: exportPage; ExportPage { query: root.query } }
   Component { id: searchPage; SearchPage { query: root.query; navigator: prefsNavigator } }
 
   readonly property var pageById: ({
@@ -163,7 +165,8 @@ ShellRoot {
     idle: idlePage,
     security: securityPage,
     hooks: hooksPage,
-    system: systemPage
+    system: systemPage,
+    export: exportPage
   })
 
   IpcHandler {
