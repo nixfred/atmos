@@ -185,6 +185,19 @@ function settingsCatalog() {
       consequence: "All name lookups go to a different resolver. A wrong value takes the network down until you change it back."
     }),
 
+    // Lists. A whole list is replaced at once, because these are the
+    // settings people actually mean when they say they want to hand someone
+    // their desktop.
+    listEntry("bindings", "Keybindings", {
+      consequence: "Your Super-key shortcuts are replaced. Imported bindings become the block Atmos manages in bindings.lua; bindings you wrote by hand stay where they are."
+    }),
+    listEntry("windowRules", "Window rules", {
+      consequence: "Rules about which windows float, centre, or open on a given workspace are replaced. Rules naming an app you do not have simply never match."
+    }),
+    listEntry("autostart", "Startup programs", {
+      consequence: "The programs Hyprland launches at login are replaced. A program you do not have installed fails quietly at the next login."
+    }),
+
     // Report only. No importer, by design.
     report("sshdEnabled", "security", "SSH server"),
     report("passwordlessSudo", "security", "Passwordless sudo"),
@@ -207,6 +220,7 @@ function entry(key, section, label, tier, opts) {
     section: section,
     label: label,
     tier: tier,
+    kind: String(o.kind || "scalar"),
     type: String(o.type || "string"),
     options: String(o.options || ""),
     hostBound: o.hostBound === true,
@@ -217,6 +231,18 @@ function entry(key, section, label, tier, opts) {
 
 function report(key, section, label) {
   return entry(key, section, label, "system", {})
+}
+
+// A list setting is its own section, so the block that carries it is named
+// for the setting itself: ```json atmos:bindings.
+function listEntry(key, label, opts) {
+  var o = opts || {}
+  return entry(key, key, label, "behavior", {
+    kind: "list",
+    type: "list",
+    consequence: o.consequence,
+    hostBound: o.hostBound === true
+  })
 }
 
 function catalogByKey(catalog) {
@@ -237,6 +263,9 @@ function settingsSections() {
     { id: "idle", title: "Idle and light", note: "Locking, the screensaver, night light, and notifications." },
     { id: "input", title: "Input", note: "Pointer and touchpad. Tuned per device, so it travels badly." },
     { id: "network", title: "Network", note: "Resolver choice. Wi-Fi passwords are never exported." },
+    { id: "bindings", title: "Keybindings", note: "Every shortcut, Super key and all. The list is replaced whole." },
+    { id: "windowRules", title: "Window rules", note: "Which windows float, centre, or open somewhere specific." },
+    { id: "autostart", title: "Startup programs", note: "What Hyprland launches when you log in." },
     { id: "system", title: "System", note: "Machine identity. Off by default when you import." },
     { id: "security", title: "Security", note: "Reported so you can read it. Atmos will not import anything here." }
   ]
@@ -313,6 +342,7 @@ function exportMarkdown(snapshot, keys, meta) {
     var section = sections[s]
     var body = []
     var reported = []
+    var listBlocks = []
     for (var i = 0; i < catalog.length; i++) {
       var item = catalog[i]
       if (item.section !== section.id) continue
@@ -323,9 +353,14 @@ function exportMarkdown(snapshot, keys, meta) {
         continue
       }
       if (!selected[item.key]) continue
+      if (item.kind === "list") {
+        if (!Array.isArray(value)) continue
+        listBlocks.push({ key: item.key, value: value })
+        continue
+      }
       body.push(tomlLine(item.key, value))
     }
-    if (body.length === 0 && reported.length === 0) continue
+    if (body.length === 0 && reported.length === 0 && listBlocks.length === 0) continue
 
     lines.push("## " + section.title)
     lines.push("")
@@ -341,9 +376,25 @@ function exportMarkdown(snapshot, keys, meta) {
       lines.push("```")
       lines.push("")
     }
+    // A list is JSON rather than TOML-lite. Rows have shape, and inventing a
+    // table syntax to avoid one JSON.parse would be a worse trade.
+    for (var b2 = 0; b2 < listBlocks.length; b2++) {
+      lines.push("```json atmos:" + listBlocks[b2].key)
+      lines.push(jsonBlock(listBlocks[b2].value))
+      lines.push("```")
+      lines.push("")
+    }
   }
 
   return lines.join("\n").replace(/\n+$/, "") + "\n"
+}
+
+// One row per line: long enough to read, short enough to diff.
+function jsonBlock(list) {
+  var rows = []
+  for (var i = 0; i < list.length; i++) rows.push("  " + JSON.stringify(list[i]))
+  if (rows.length === 0) return "[]"
+  return "[\n" + rows.join(",\n") + "\n]"
 }
 
 function keyLookup(keys) {
@@ -361,6 +412,7 @@ function quotedOr(value, fallback) {
 function displayValue(value) {
   if (value === true) return "on"
   if (value === false) return "off"
+  if (Array.isArray(value)) return countLabel(value.length, "entry", "entries")
   return String(value)
 }
 
@@ -371,26 +423,31 @@ function parseSettingsMarkdown(text) {
   var sections = {}
   var errors = []
   var open = ""
+  var openKind = "toml"
   var buffer = []
 
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i]
     var trimmed = line.replace(/^\s+|\s+$/g, "")
     if (!open) {
-      var start = trimmed.match(/^```\s*toml\s+atmos:([a-z][a-z0-9-]*)\s*$/)
+      var start = trimmed.match(/^```\s*(toml|json)\s+atmos:([A-Za-z][A-Za-z0-9-]*)\s*$/)
       if (start) {
-        open = start[1]
+        openKind = start[1]
+        open = start[2]
         buffer = []
       }
       continue
     }
     if (trimmed === "```") {
-      var parsed = parseTomlLite(buffer, open, errors)
+      var parsed = openKind === "json"
+        ? parseJsonBlock(buffer, open, errors)
+        : parseTomlLite(buffer, open, errors)
       if (!sections[open]) sections[open] = {}
       for (var key in parsed) {
         if (Object.prototype.hasOwnProperty.call(parsed, key)) sections[open][key] = parsed[key]
       }
       open = ""
+      openKind = "toml"
       buffer = []
       continue
     }
@@ -402,6 +459,21 @@ function parseSettingsMarkdown(text) {
   var meta = sections.meta || {}
   delete sections.meta
   return { meta: meta, sections: sections, errors: errors }
+}
+
+function parseJsonBlock(lines, name, errors) {
+  var out = {}
+  try {
+    var value = JSON.parse((lines || []).join("\n"))
+    if (!Array.isArray(value)) {
+      errors.push("atmos:" + name + " is not a list")
+      return out
+    }
+    out[name] = value
+  } catch (e) {
+    errors.push("atmos:" + name + " is not readable JSON")
+  }
+  return out
 }
 
 function parseTomlLite(lines, section, errors) {
@@ -614,6 +686,7 @@ function countLabel(n, one, many) {
 }
 
 function typeMatches(type, value) {
+  if (type === "list") return Array.isArray(value)
   if (type === "boolean") return value === true || value === false
   if (type === "integer") return typeof value === "number" && isFinite(value) && Math.floor(value) === value
   if (type === "number") return typeof value === "number" && isFinite(value)
@@ -639,6 +712,7 @@ function allowedContains(list, value) {
 
 function sameValue(a, b) {
   if (typeof a === "number" && typeof b === "number") return Math.abs(a - b) < 1e-9
+  if (Array.isArray(a) && Array.isArray(b)) return JSON.stringify(a) === JSON.stringify(b)
   return a === b
 }
 

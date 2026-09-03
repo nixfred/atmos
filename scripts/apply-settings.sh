@@ -68,6 +68,8 @@ else
 fi
 
 plan_value() { jq -r --arg k "$1" '.changes[] | select(.key == $k) | .value' <<<"$PLAN"; }
+# A list value has to stay JSON on the way to its writer.
+plan_list() { jq -c --arg k "$1" '[.changes[] | select(.key == $k) | .value] | .[0] // []' <<<"$PLAN"; }
 plan_has() { jq -e --arg k "$1" 'any(.changes[]; .key == $k)' <<<"$PLAN" >/dev/null 2>&1; }
 snap_value() { jq -r --arg p "$1" 'getpath($p | split(".")) // empty' <<<"$SNAPSHOT"; }
 
@@ -95,6 +97,9 @@ backup_for() {
   case $1 in
     hyprLook) printf '%s\n' "$HOME/.config/hypr/looknfeel.lua" ;;
     hyprInput) printf '%s\n' "$HOME/.config/hypr/input.lua" ;;
+    bindings) printf '%s\n' "$HOME/.config/hypr/bindings.lua" ;;
+    autostart) printf '%s\n' "$HOME/.config/hypr/autostart.lua" ;;
+    windowRules) printf '%s\n' "$HOME/.config/hypr/atmos.lua" ;;
     nightlightSchedule) printf '%s\n' "$HOME/.config/hypr/hyprsunset.conf" ;;
     clock | barLayout) printf '%s\n' "$HOME/.config/omarchy/shell.json" ;;
     *) : ;;
@@ -193,6 +198,22 @@ while IFS= read -r key; do
           "$(jq -nc --arg d "$day" --arg n "$night" --argjson o "${on:-false}" --argjson t "${temp:-0}" \
             '{day:$d, night:$n, nightOn:$o, temperature:$t}')"
       fi
+      ;;
+
+    # The sentinel writers take the whole list, so a list setting is one call.
+    # `managed` is a fact about where a row currently lives, not part of the
+    # row, so it never travels to the writer.
+    bindings)
+      queue "$key" bindings bash "$ROOT/set-hypr-bindings.sh" \
+        "$(jq -c '{items: [.[] | {keys, label, command, unbind}]}' <<<"$(plan_list "$key")")"
+      ;;
+    windowRules)
+      queue "$key" windowRules bash "$ROOT/set-hypr-windows.sh" \
+        "$(jq -c '{items: [.[] | del(.managed)]}' <<<"$(plan_list "$key")")"
+      ;;
+    autostart)
+      queue "$key" autostart bash "$ROOT/set-hypr-autostart.sh" \
+        "$(jq -c '{commands: [.[] | .command]}' <<<"$(plan_list "$key")")"
       ;;
 
     hostname) queue "$key" "" bash "$ROOT/set-hostname.sh" "$value" ;;

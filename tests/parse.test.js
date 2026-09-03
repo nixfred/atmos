@@ -1191,3 +1191,69 @@ for (const label of labels) {
   if (!byKey[label] && !byKey[key] && label.indexOf('.*') === -1) orphanLabel = label
 }
 assertEqual(orphanLabel, '', 'apply-settings.sh has no writer for a setting the catalog dropped')
+
+// Lists: whole-list settings carried in a json block named for the setting.
+assertEqual(byKey.bindings.kind, 'list', 'bindings is a list setting')
+assertEqual(byKey.bindings.section, 'bindings', 'a list setting is its own section')
+assert(byKey.bindings.consequence.length > 0, 'replacing your keybindings explains itself')
+assertEqual(byKey.autostart.kind, 'list', 'autostart is a list setting')
+assertEqual(byKey.windowRules.kind, 'list', 'windowRules is a list setting')
+
+const listSnapshot = {
+  bindings: [
+    { keys: 'SUPER + RETURN', label: 'Terminal', command: 'kitty', unbind: false, managed: true },
+    { keys: 'SUPER + J', label: '', command: '', unbind: true, managed: false }
+  ],
+  autostart: [{ command: 'solaar --window=hide', managed: false }],
+  windowRules: []
+}
+
+const listMd = settings.exportMarkdown(listSnapshot, ['bindings', 'autostart'], { hardware: 'aaa' })
+assert(listMd.indexOf('```json atmos:bindings') !== -1, 'exportMarkdown writes a json block for a list')
+assert(listMd.indexOf('## Keybindings') !== -1, 'a list setting gets its own heading')
+assert(listMd.indexOf('"SUPER + RETURN"') !== -1, 'the exported list keeps the binding')
+
+const listBack = settings.parseSettingsMarkdown(listMd)
+assertEqual(listBack.errors.length, 0, 'a list file reads back without errors')
+assertEqual(listBack.sections.bindings.bindings.length, 2, 'parseSettingsMarkdown reads the whole list')
+assertEqual(
+  listBack.sections.bindings.bindings[0].keys,
+  'SUPER + RETURN',
+  'parseSettingsMarkdown keeps row shape'
+)
+
+const listReplay = settings.planImport(listBack, listSnapshot, null, { hardware: 'aaa' })
+assertEqual(listReplay.changes.length, 0, 'exporting a list and replaying it changes nothing')
+assertEqual(listReplay.unchanged.length, 2, 'both lists already match')
+
+const listChanged = settings.planImport(
+  settings.parseSettingsMarkdown(
+    '```toml atmos:meta\nschema = 1\n```\n' +
+    '```json atmos:bindings\n[{"keys":"SUPER + T","label":"","command":"kitty","unbind":false}]\n```\n'
+  ),
+  listSnapshot,
+  null,
+  {}
+)
+assertEqual(listChanged.changes.length, 1, 'a different list is one change')
+assertEqual(listChanged.changes[0].from.length, 2, 'the change carries the list being replaced')
+assertEqual(listChanged.changes[0].to.length, 1, 'the change carries the incoming list')
+assertEqual(settings.displayValue(listChanged.changes[0].to), '1 entry', 'a list reads as a count')
+
+const notAList = settings.parseSettingsMarkdown('```json atmos:bindings\n{"keys":"SUPER + T"}\n```\n')
+assertEqual(notAList.errors.length, 1, 'a json block that is not a list is an error')
+assert(notAList.errors[0].indexOf('is not a list') !== -1, 'the error says it is not a list')
+
+const badJson = settings.parseSettingsMarkdown('```json atmos:bindings\n[{"keys":\n```\n')
+assertEqual(badJson.errors.length, 1, 'unreadable JSON is an error')
+assert(badJson.errors[0].indexOf('not readable JSON') !== -1, 'the error says the JSON is unreadable')
+
+const listWrongType = settings.planImport(
+  settings.parseSettingsMarkdown(
+    '```toml atmos:meta\nschema = 1\n```\n```toml atmos:bindings\nbindings = "nope"\n```\n'
+  ),
+  listSnapshot,
+  null,
+  {}
+)
+assertEqual(listWrongType.blocked.length, 1, 'a list setting given a string is blocked')
