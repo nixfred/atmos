@@ -769,3 +769,25 @@ JSON
 else
   echo "ok - skipping apply-settings.sh list dispatch"
 fi
+
+if [[ -x scripts/apply-settings.sh ]] && command -v jq >/dev/null 2>&1; then
+  undo_dir=$(mktemp -d)
+  printf '{"theme":"one"}' >"$undo_dir/snapshot.json"
+  printf '{"schema":1,"changes":[{"key":"theme","value":"two","from":"one"}]}' >"$undo_dir/plan.json"
+  bash scripts/apply-settings.sh --dry-run --snapshot "$undo_dir/snapshot.json" \
+    --plan "$undo_dir/plan.json" --backup "$undo_dir/first" >/dev/null
+  jq -e '.changes[0].value == "one"' "$undo_dir/first/undo.json" >/dev/null
+  # Undoing must not leave a way back of its own, or a second undo would put
+  # the import straight back.
+  bash scripts/apply-settings.sh --dry-run --no-backup --snapshot "$undo_dir/snapshot.json" \
+    --plan "$undo_dir/first/undo.json" --backup "$undo_dir/second" >/dev/null
+  if [[ -f $undo_dir/second/undo.json ]]; then
+    echo "not ok - apply-settings.sh --no-backup still wrote a way back"
+    rm -rf "$undo_dir"
+    exit 1
+  fi
+  rm -rf "$undo_dir"
+  echo "ok - apply-settings.sh --no-backup leaves no way back, so undo does not redo"
+else
+  echo "ok - skipping apply-settings.sh undo"
+fi

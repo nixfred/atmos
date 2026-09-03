@@ -692,6 +692,19 @@ function planImport(doc, snapshot, keys, options) {
         unchanged.push(key)
         continue
       }
+      // The sentinel writers add a block of their own and leave whatever you
+      // wrote by hand where it is. Importing a list Atmos does not already
+      // own therefore leaves two copies of those rows in the file, with the
+      // Atmos block winning. That is worth saying before it happens.
+      var handWritten = unmanagedCount(from)
+      if (handWritten > 0) {
+        warnings.push({
+          key: key,
+          message: countLabel(handWritten, "row", "rows") + " of your current " + item.label.toLowerCase() +
+            " are written by hand in the config file. Atmos writes its own block and leaves those lines alone, " +
+            "so they stay in the file with the imported ones taking effect."
+        })
+      }
       changes.push({
         key: key,
         section: item.section,
@@ -755,6 +768,17 @@ function allowedContains(list, value) {
     if (option && typeof option === "object" && option.value === value) return true
   }
   return false
+}
+
+// Rows the snapshot says live outside the block Atmos manages.
+function unmanagedCount(value) {
+  if (!Array.isArray(value)) return 0
+  var n = 0
+  for (var i = 0; i < value.length; i++) {
+    var row = value[i]
+    if (row && typeof row === "object" && row.managed === false) n++
+  }
+  return n
 }
 
 function sameValue(a, b) {

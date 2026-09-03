@@ -101,12 +101,21 @@ PrefsPage {
     root.exportWritten = false
     root.working = true
     writeProc.text = text
-    writeProc.command = ["sh", "-c", "cat > \"$1\"", "sh", root.exportPath]
+    writeProc.command = ["sh", "-c", "cat > \"$1\"", "sh", root.realPath(root.exportPath)]
     writeProc.running = true
   }
 
+  // A path typed with a leading ~ never reaches a shell that would expand
+  // it, so it would arrive at the writer as a literal directory name.
+  function realPath(path) {
+    var text = String(path || "")
+    if (text === "~") return root.home
+    if (text.indexOf("~/") === 0) return root.home + text.slice(1)
+    return text
+  }
+
   function openFile(path) {
-    openProc.command = ["xdg-open", path]
+    openProc.command = ["xdg-open", root.realPath(path)]
     openProc.running = true
   }
 
@@ -114,7 +123,7 @@ PrefsPage {
     root.plan = null
     root.importStatus = ""
     root.working = true
-    readProc.command = ["cat", root.importPath]
+    readProc.command = ["cat", root.realPath(root.importPath)]
     readProc.running = true
   }
 
@@ -134,7 +143,7 @@ PrefsPage {
     applyProc.command = ["sh", "-c",
       "d=$(ls -1d \"$HOME\"/.local/state/atmos/imports/*/ 2>/dev/null | tail -1); " +
       "[ -n \"$d\" ] || { echo 'no import to undo' >&2; exit 1; }; " +
-      "bash \"$1\" --plan \"$d/undo.json\"", "sh", root.applyScript]
+      "bash \"$1\" --no-backup --plan \"$d/undo.json\"", "sh", root.applyScript]
     applyProc.running = true
   }
 

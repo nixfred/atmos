@@ -20,6 +20,7 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 STATE_HOME=${XDG_STATE_HOME:-$HOME/.local/state}
 DRY=0
+NO_BACKUP=0
 PLAN_FILE=""
 SNAPSHOT_FILE=""
 BACKUP_DIR=""
@@ -27,10 +28,11 @@ BACKUP_DIR=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     --dry-run) DRY=1; shift ;;
+    --no-backup) NO_BACKUP=1; shift ;;
     --plan) PLAN_FILE=${2:-}; shift 2 ;;
     --snapshot) SNAPSHOT_FILE=${2:-}; shift 2 ;;
     --backup) BACKUP_DIR=${2:-}; shift 2 ;;
-    *) echo "Usage: apply-settings.sh [--dry-run] [--plan <file>] [--snapshot <file>] [--backup <dir>]" >&2; exit 2 ;;
+    *) echo "Usage: apply-settings.sh [--dry-run] [--no-backup] [--plan <file>] [--snapshot <file>] [--backup <dir>]" >&2; exit 2 ;;
   esac
 done
 
@@ -241,16 +243,23 @@ else
   BACKUP_DIR="$STATE_HOME/atmos/imports/$(date -u +%Y%m%dT%H%M%SZ)"
 fi
 
+# Undoing must not leave a way back of its own. If it did, the newest way
+# back would be the one that reverses the undo, and pressing undo twice
+# would put the import straight back rather than doing nothing.
+if [[ $NO_BACKUP -eq 1 ]]; then
+  EXPLICIT_BACKUP=0
+fi
+
 # A dry run writes the undo plan when you name a directory, so you can read
 # the way back before you commit to the way forward. It never copies files,
 # because nothing is about to change them.
-if [[ $DRY -eq 0 || $EXPLICIT_BACKUP -eq 1 ]]; then
+if [[ $NO_BACKUP -eq 0 && ( $DRY -eq 0 || $EXPLICIT_BACKUP -eq 1 ) ]]; then
   mkdir -p -- "$BACKUP_DIR"
   jq '{schema: .schema, changes: [.changes[] | select(.from != null) | {key: .key, value: .from, from: .value}]}' \
     <<<"$PLAN" >"$BACKUP_DIR/undo.json"
 fi
 
-if [[ $DRY -eq 0 ]]; then
+if [[ $DRY -eq 0 && $NO_BACKUP -eq 0 ]]; then
   for group in "${RUN_GROUPS[@]:-}"; do
     [[ -n $group ]] || continue
     file=$(backup_for "$group")
@@ -279,7 +288,9 @@ for i in "${!RUN_KEYS[@]}"; do
 done
 
 if [[ $DRY -eq 0 ]]; then
-  printf '%s\n' "${results[@]}" | jq -sc --arg dir "$BACKUP_DIR" '{backup:$dir, results:.}'
+  printf '%s\n' "${results[@]}" | jq -sc \
+    --arg dir "$([[ $NO_BACKUP -eq 1 ]] && echo "" || echo "$BACKUP_DIR")" \
+    '{backup:$dir, results:.}'
 fi
 
 exit $status

@@ -1297,3 +1297,39 @@ assertEqual(
   settings.presetKeys('full', catalog).length,
   'the sections between them cover every importable setting'
 )
+
+// A sentinel writer leaves hand-written rows where they are, so importing a
+// list Atmos does not already own leaves two copies in the file.
+const handWritten = {
+  bindings: [
+    { keys: 'SUPER + D', label: 'Desks', command: 'desk', unbind: false, managed: false },
+    { keys: 'SUPER + B', label: 'Brave', command: 'brave', unbind: false, managed: false }
+  ]
+}
+const shadowPlan = settings.planImport(
+  settings.parseSettingsMarkdown(
+    '```toml atmos:meta\nschema = 1\n```\n' +
+    '```json atmos:bindings\n[{"keys":"SUPER + T","label":"","command":"kitty","unbind":false}]\n```\n'
+  ),
+  handWritten, null, {}
+)
+assertEqual(shadowPlan.changes.length, 1, 'replacing hand-written bindings is still one change')
+assertEqual(shadowPlan.warnings.length, 1, 'replacing hand-written bindings warns')
+assert(
+  shadowPlan.warnings[0].message.indexOf('2 rows') === 0,
+  'the warning counts the hand-written rows'
+)
+assert(
+  shadowPlan.warnings[0].message.indexOf('written by hand') !== -1,
+  'the warning says the rows are hand-written'
+)
+
+const alreadyManaged = settings.planImport(
+  settings.parseSettingsMarkdown(
+    '```toml atmos:meta\nschema = 1\n```\n' +
+    '```json atmos:bindings\n[{"keys":"SUPER + T","label":"","command":"kitty","unbind":false}]\n```\n'
+  ),
+  { bindings: [{ keys: 'SUPER + D', label: '', command: 'desk', unbind: false, managed: true }] },
+  null, {}
+)
+assertEqual(alreadyManaged.warnings.length, 0, 'rows Atmos already owns need no warning')
