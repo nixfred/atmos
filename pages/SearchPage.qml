@@ -43,12 +43,10 @@ Item {
       item.navigator = root.navigator
   }
 
-  Flickable {
+  PrefsFlickable {
     id: flick
     anchors.fill: parent
     clip: true
-    boundsBehavior: Flickable.StopAtBounds
-    contentWidth: width
     contentHeight: pageColumn.implicitHeight + Theme.spaceLg * 2
 
     Column {

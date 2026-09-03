@@ -268,7 +268,7 @@ ShellRoot {
           }
         }
 
-        Flickable {
+        PrefsFlickable {
           id: navFlick
           anchors.left: parent.left
           anchors.right: parent.right
@@ -276,10 +276,7 @@ ShellRoot {
           anchors.topMargin: Theme.space
           anchors.bottom: parent.bottom
           clip: true
-          contentWidth: width
           contentHeight: navColumn.implicitHeight
-          boundsBehavior: Flickable.StopAtBounds
-          flickableDirection: Flickable.VerticalFlick
 
           Column {
             id: navColumn
