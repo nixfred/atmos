@@ -1257,3 +1257,43 @@ const listWrongType = settings.planImport(
   {}
 )
 assertEqual(listWrongType.blocked.length, 1, 'a list setting given a string is blocked')
+
+// Sections, for a UI that offers sections rather than one switch per setting.
+const appearanceKeys = settings.sectionKeys('appearance', catalog)
+assert(appearanceKeys.indexOf('theme') !== -1, 'sectionKeys finds the theme in appearance')
+assert(appearanceKeys.indexOf('browser') === -1, 'sectionKeys keeps sections apart')
+assertEqual(settings.sectionKeys('security', catalog).length, 0, 'the security section offers no importable keys')
+
+const selectable = settings.selectableSections(catalog)
+let securityOffered = false
+let emptyOffered = ''
+for (const section of selectable) {
+  if (section.id === 'security') securityOffered = true
+  if (section.count === 0) emptyOffered = section.id
+}
+assertEqual(securityOffered, false, 'the security section is never offered as a switch')
+assertEqual(emptyOffered, '', 'no empty section is offered')
+assert(selectable.length >= 8, 'every section holding settings is offered')
+
+let identityDefault = true
+let appearanceDefault = false
+for (const section of selectable) {
+  if (section.id === 'system') identityDefault = section.byDefault
+  if (section.id === 'appearance') appearanceDefault = section.byDefault
+}
+assertEqual(identityDefault, false, 'machine identity starts switched off')
+assertEqual(appearanceDefault, true, 'appearance starts switched on')
+
+const twoSections = settings.keysForSections(['appearance', 'defaults'], catalog)
+assert(twoSections.indexOf('theme') !== -1, 'keysForSections takes the first section')
+assert(twoSections.indexOf('browser') !== -1, 'keysForSections takes the second section')
+assert(twoSections.indexOf('hostname') === -1, 'keysForSections leaves out what was not asked for')
+assertEqual(settings.keysForSections([], catalog).length, 0, 'no sections means no keys')
+
+let sectionTotal = 0
+for (const section of selectable) sectionTotal += section.count
+assertEqual(
+  sectionTotal,
+  settings.presetKeys('full', catalog).length,
+  'the sections between them cover every importable setting'
+)

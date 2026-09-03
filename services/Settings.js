@@ -292,6 +292,53 @@ function presetKeys(preset, catalog) {
   return out
 }
 
+// The importable keys in one section, for a UI that offers sections rather
+// than one switch per setting.
+function sectionKeys(section, catalog) {
+  var list = catalog || settingsCatalog()
+  var want = String(section || "")
+  var out = []
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].section !== want) continue
+    if (!list[i].importable) continue
+    out.push(list[i].key)
+  }
+  return out
+}
+
+// The sections worth offering: the ones that hold something you can carry.
+// The security section is reported either way and never has a switch.
+function selectableSections(catalog) {
+  var list = catalog || settingsCatalog()
+  var sections = settingsSections()
+  var out = []
+  for (var i = 0; i < sections.length; i++) {
+    var keys = sectionKeys(sections[i].id, list)
+    if (keys.length === 0) continue
+    out.push({
+      id: sections[i].id,
+      title: sections[i].title,
+      note: sections[i].note,
+      count: keys.length,
+      // Identity belongs to one machine, so it starts switched off.
+      byDefault: sections[i].id !== "system"
+    })
+  }
+  return out
+}
+
+function keysForSections(ids, catalog) {
+  var list = catalog || settingsCatalog()
+  var want = keyLookup(ids)
+  var out = []
+  for (var i = 0; i < list.length; i++) {
+    if (!list[i].importable) continue
+    if (!want[list[i].section]) continue
+    out.push(list[i].key)
+  }
+  return out
+}
+
 function readValue(source, key) {
   var parts = String(key || "").split(".")
   var node = source

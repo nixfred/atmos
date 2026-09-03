@@ -1,9 +1,11 @@
 import QtQuick
+import QtQuick.Dialogs
 import Quickshell
 import Quickshell.Io
 import "../components"
 import "../services"
 import "../services/Settings.js" as SettingsJs
+import "../services/RichUi.js" as RichUi
 
 PrefsPage {
   id: root
@@ -13,8 +15,11 @@ PrefsPage {
   readonly property string home: Quickshell.env("HOME")
   readonly property string applyScript: Omarchy.shellDir + "/scripts/apply-settings.sh"
 
-  property string preset: "portable"
+  // Section id -> included. Seeded from the catalog so a new section shows
+  // up here without this page having to be told about it.
+  property var sections: ({})
   property string exportPath: home + "/atmos-settings.md"
+  property bool exportWritten: false
   property string importPath: home + "/atmos-settings.md"
 
   property string exportStatus: ""
@@ -22,13 +27,41 @@ PrefsPage {
   property var plan: null
   property bool working: false
 
-  readonly property var presetOptions: [
-    { value: "look", label: "Looks only" },
-    { value: "portable", label: "Everything portable" },
-    { value: "full", label: "Everything, including this machine's identity" }
-  ]
+  readonly property var sectionList: SettingsJs.selectableSections()
 
-  readonly property int presetCount: SettingsJs.presetKeys(root.preset).length
+  function chosenSections() {
+    var out = []
+    for (var i = 0; i < root.sectionList.length; i++) {
+      var id = root.sectionList[i].id
+      if (root.sections[id]) out.push(id)
+    }
+    return out
+  }
+
+  readonly property var chosenKeys: {
+    var _ = root.sections
+    return SettingsJs.keysForSections(root.chosenSections())
+  }
+
+  function setSection(id, on) {
+    var next = {}
+    for (var k in root.sections) next[k] = root.sections[k]
+    next[id] = on
+    root.sections = next
+  }
+
+  function setAllSections(on) {
+    var next = {}
+    for (var i = 0; i < root.sectionList.length; i++) next[root.sectionList[i].id] = on
+    root.sections = next
+  }
+
+  function resetSections() {
+    var next = {}
+    for (var i = 0; i < root.sectionList.length; i++)
+      next[root.sectionList[i].id] = root.sectionList[i].byDefault
+    root.sections = next
+  }
 
   readonly property string planSummary: root.plan ? root.plan.summary : ""
   readonly property bool planHasChanges: !!root.plan && root.plan.changes.length > 0
@@ -59,16 +92,22 @@ PrefsPage {
     : ""
 
   function doExport() {
-    var keys = SettingsJs.presetKeys(root.preset)
+    var keys = root.chosenKeys
     var text = SettingsJs.exportMarkdown(Omarchy.snapshotData, keys, {
       exported: new Date().toISOString(),
       hardware: Omarchy.dmiProduct
     })
     root.exportStatus = ""
+    root.exportWritten = false
     root.working = true
     writeProc.text = text
     writeProc.command = ["sh", "-c", "cat > \"$1\"", "sh", root.exportPath]
     writeProc.running = true
+  }
+
+  function openFile(path) {
+    openProc.command = ["xdg-open", path]
+    openProc.running = true
   }
 
   function doReview() {
@@ -110,11 +149,14 @@ PrefsPage {
     }
     onExited: function(exitCode) {
       root.working = false
+      root.exportWritten = exitCode === 0
       root.exportStatus = exitCode === 0
-        ? "Wrote " + root.presetCount + " settings to " + root.exportPath
+        ? "Wrote " + root.chosenKeys.length + " settings to " + root.exportPath
         : "Could not write " + root.exportPath
     }
   }
+
+  Process { id: openProc; command: ["true"] }
 
   Process {
     id: readProc
@@ -163,16 +205,40 @@ PrefsPage {
     detail: "Atmos writes a Markdown file. The settings live in fenced blocks, so you can read the file, edit it, and hand it to someone without it being able to do anything you cannot see. Security settings are written down for you to read but Atmos will never import them."
 
     PrefsRow {
-      label: "What to include"
-      description: "Looks travel anywhere. Portable adds the settings that are true on any machine. The last one adds hostname, timezone, locale, and keyboard layout, which usually belong to one machine only."
+      label: "Sections"
+      description: root.chosenKeys.length + " settings selected across "
+        + root.chosenSections().length + " sections."
       query: root.query
-      keywords: ["preset", "look", "portable", "everything", "identity"]
+      keywords: ["all", "none", "select", "sections", "choose"]
 
-      PrefsSelect {
-        value: root.preset
-        options: root.presetOptions
+      PrefsButton {
+        text: "All"
         enabled: !root.working
-        onChanged: function(value) { root.preset = value }
+        onClicked: root.setAllSections(true)
+      }
+
+      PrefsButton {
+        text: "None"
+        enabled: !root.working
+        onClicked: root.setAllSections(false)
+      }
+    }
+
+    Repeater {
+      model: root.sectionList
+
+      PrefsRow {
+        required property var modelData
+        label: modelData.title
+        description: modelData.note + "  (" + modelData.count + " settings)"
+        query: root.query
+        keywords: [modelData.id, "section", "include", "export"]
+
+        PrefsToggle {
+          checked: !!root.sections[modelData.id]
+          enabled: !root.working
+          onToggled: root.setSection(modelData.id, !root.sections[modelData.id])
+        }
       }
     }
 
@@ -201,8 +267,14 @@ PrefsPage {
       PrefsButton {
         text: "Export"
         primary: true
-        enabled: !root.working && root.exportPath.length > 0
+        enabled: !root.working && root.exportPath.length > 0 && root.chosenKeys.length > 0
         onClicked: root.doExport()
+      }
+
+      PrefsButton {
+        text: "Open"
+        enabled: root.exportWritten && !root.working
+        onClicked: root.openFile(root.exportPath)
       }
     }
   }
@@ -223,6 +295,12 @@ PrefsPage {
         placeholder: root.home + "/atmos-settings.md"
         enabled: !root.working
         onEdited: function(value) { root.importPath = value }
+      }
+
+      PrefsButton {
+        text: "Browse"
+        enabled: !root.working
+        onClicked: importFileDialog.open()
       }
     }
 
@@ -323,7 +401,19 @@ PrefsPage {
     }
   }
 
+  FileDialog {
+    id: importFileDialog
+    title: "Open a settings file"
+    nameFilters: ["Settings files (*.md)", "All files (*)"]
+    onAccepted: {
+      root.importPath = RichUi.pathFromUrl(selectedFile)
+      root.plan = null
+      root.importStatus = ""
+    }
+  }
+
   Component.onCompleted: {
+    root.resetSections()
     applyConfirm.parent = root.prefsOverlay
     undoConfirm.parent = root.prefsOverlay
   }
