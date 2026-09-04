@@ -22,6 +22,7 @@ Item {
 
   PrefsFlickable {
     id: flick
+    diagName: "PAGE[" + root.title + "]"
     anchors.fill: parent
     clip: !root.embed
     interactive: !root.embed && contentHeight > height

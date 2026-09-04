@@ -33,6 +33,7 @@ Flickable {
   // 1 keeps Input → Scroll speed as the only speed control; pixelDelta
   // already includes compositor scroll_factor.
   property real scrollFactor: 1
+  property string diagName: "flick"
 
   contentWidth: width
   flickableDirection: Flickable.VerticalFlick
@@ -52,6 +53,8 @@ Flickable {
     enabled: root.interactive
 
     onWheel: function(wheel) {
+      console.log("PR8DIAG", root.diagName, "px=" + wheel.pixelDelta.y, "ang=" + wheel.angleDelta.y,
+        "cy=" + root.contentY.toFixed(0), "at=" + wheel.x.toFixed(0) + "," + wheel.y.toFixed(0))
       var max = Math.max(0, root.contentHeight - root.height)
       if (max <= 0) {
         wheel.accepted = false
