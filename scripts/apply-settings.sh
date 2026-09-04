@@ -19,6 +19,21 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 STATE_HOME=${XDG_STATE_HOME:-$HOME/.local/state}
+
+# snapshot.sh defends this and the writers assume it, but omarchy-shell-config
+# reads it too and dies on an unbound variable when a plan is applied from
+# outside a desktop session.
+: "${OMARCHY_PATH:=/usr/share/omarchy}"
+export OMARCHY_PATH
+
+# The sentinel writers ask Hyprland to reload after writing, and report the
+# reload's exit status as their own. With no Hyprland running that turns a
+# write that succeeded into a change reported as failed. The writers already
+# take this seam for their own tests.
+if [[ -z ${ATMOS_SKIP_HYPR:-} ]] && ! hyprctl version >/dev/null 2>&1; then
+  ATMOS_SKIP_HYPR=1
+fi
+export ATMOS_SKIP_HYPR=${ATMOS_SKIP_HYPR:-0}
 DRY=0
 NO_BACKUP=0
 PLAN_FILE=""
