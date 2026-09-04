@@ -677,9 +677,20 @@ function planImport(doc, snapshot, keys, options) {
       }
       if (item.options) {
         var allowed = readValue(snap, item.options)
-        if (Array.isArray(allowed) && allowed.length > 0 && !allowedContains(allowed, to)) {
-          blocked.push({ key: key, reason: displayValue(to) + " is not available on this machine." })
-          continue
+        if (Array.isArray(allowed) && allowed.length > 0) {
+          if (!allowedContains(allowed, to)) {
+            blocked.push({ key: key, reason: displayValue(to) + " is not available on this machine." })
+            continue
+          }
+        } else {
+          // Refusing everything on a machine that cannot list its own options
+          // would be worse than letting it through, but saying nothing would
+          // leave the check looking exact when it was never made.
+          warnings.push({
+            key: key,
+            message: "This machine did not report which " + item.label.toLowerCase() +
+              " values it has, so " + displayValue(to) + " could not be checked. It may fail when applied."
+          })
         }
       }
       if (item.hostBound && differentHardware) {

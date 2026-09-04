@@ -1430,3 +1430,21 @@ assert(
   'exportFileName survives an unusable date'
 )
 assertEqual(settings.fileSafe('a'.repeat(80)).length, 40, 'a very long hostname is trimmed')
+
+// A machine that cannot list its own options should not have every value
+// refused, but the check looking exact when it was never made is worse.
+const cannotCheck = settings.planImport(
+  settings.parseSettingsMarkdown(
+    '```toml atmos:meta\nschema = 1\n```\n' +
+    '```toml atmos:appearance\ntheme = "anything-at-all"\n```\n'
+  ),
+  { theme: 'Unknown', themes: [] },
+  null, {}
+)
+assertEqual(cannotCheck.blocked.length, 0, 'an unlistable option is not blocked outright')
+assertEqual(cannotCheck.changes.length, 1, 'an unlistable option still plans the change')
+assertEqual(cannotCheck.warnings.length, 1, 'an unlistable option warns that it was not checked')
+assert(
+  cannotCheck.warnings[0].message.indexOf('could not be checked') !== -1,
+  'the warning says the value was not checked'
+)

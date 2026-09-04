@@ -293,7 +293,9 @@ for i in "${!RUN_KEYS[@]}"; do
     results+=("$(jq -nc --arg k "$key" '{key:$k, status:"dry-run"}')")
     continue
   fi
-  if err=$("${argv[@]}" 2>&1 >/dev/null); then
+  # Combined, not stderr alone: omarchy reports its failures on stdout, so
+  # capturing stderr by itself left every failure with an empty reason.
+  if err=$("${argv[@]}" 2>&1); then
     results+=("$(jq -nc --arg k "$key" '{key:$k, status:"applied"}')")
   else
     status=1
