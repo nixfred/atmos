@@ -699,10 +699,10 @@ JSON
   fi
   # The sentinel writer replaces the whole block, so the call carries the
   # settings the plan never mentioned as well as the ones it changed.
-  grep -q 'gapsIn[^,]*:9' <<<"$out"
-  grep -q 'rounding[^,]*:8' <<<"$out"
-  grep -q 'gapsOut[^,]*:10' <<<"$out"
-  grep -q 'layout[^,]*dwindle' <<<"$out"
+  grep -q '"gapsIn":9' <<<"$out"
+  grep -q '"rounding":8' <<<"$out"
+  grep -q '"gapsOut":10' <<<"$out"
+  grep -q '"layout":"dwindle"' <<<"$out"
   # A paired writer takes both values, so the one that did not change is read
   # back from the snapshot rather than lost.
   grep -q 'set-idle.sh 300 900' <<<"$out"

@@ -1448,3 +1448,22 @@ assert(
   cannotCheck.warnings[0].message.indexOf('could not be checked') !== -1,
   'the warning says the value was not checked'
 )
+
+// A plan says what would change. This says what you are about to trust.
+const provenance = settings.parseSettingsMarkdown(
+  '```toml atmos:meta\nschema = 1\nhostname = "vic"\nexported = "2026-09-03T20:06:11.000Z"\nhardware = "Victus by HP"\n```\n' +
+  '```toml atmos:appearance\ntheme = "catppuccin"\n```\n' +
+  '```toml atmos:defaults\nbrowser = "brave"\n```\n'
+)
+const provPlan = settings.planImport(provenance, { theme: 'catppuccin', browser: 'firefox' }, null, {})
+const summaryText = settings.fileSummary(provenance, provPlan)
+assert(summaryText.indexOf('From vic') !== -1, 'fileSummary names the machine it came from')
+assert(summaryText.indexOf('2026-09-03 20:06:11') !== -1, 'fileSummary reads the export time plainly')
+assert(summaryText.indexOf('Victus by HP') !== -1, 'fileSummary names the hardware')
+assert(summaryText.indexOf('2 sections: appearance, defaults') !== -1, 'fileSummary lists the sections')
+assert(summaryText.indexOf('1 of these already match') !== -1, 'fileSummary counts what already matches')
+
+const anonymous = settings.parseSettingsMarkdown('```toml atmos:appearance\ntheme = "x"\n```\n')
+const anonText = settings.fileSummary(anonymous, null)
+assert(anonText.indexOf('1 section: appearance') !== -1, 'fileSummary still describes a file with no meta')
+assertEqual(settings.fileSummary(null, null), '', 'fileSummary survives no document')

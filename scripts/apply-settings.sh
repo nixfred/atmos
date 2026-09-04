@@ -126,6 +126,7 @@ backup_for() {
 declare -a RUN_KEYS=()
 declare -a RUN_CMDS=()
 declare -a RUN_GROUPS=()
+declare -a RUN_STDIN=()
 
 queue() {
   local key=$1 group=$2
@@ -133,6 +134,18 @@ queue() {
   RUN_KEYS+=("$key")
   RUN_GROUPS+=("$group")
   RUN_CMDS+=("$(printf '%s\0' "$@" | base64 -w0)")
+  RUN_STDIN+=("")
+}
+
+# The kernel caps a single argv entry at 128 KiB, so a long list handed to a
+# writer as an argument fails the exec with "Argument list too long". The
+# sentinel writers take their payload on stdin when given no argument, which
+# has no such limit.
+queue_stdin() {
+  local key=$1 group=$2 payload=$3
+  shift 3
+  queue "$key" "$group" "$@"
+  RUN_STDIN[${#RUN_STDIN[@]}-1]=$payload
 }
 
 bool_arg() { [[ $1 == true ]] && printf 'true\n' || printf 'false\n'; }
@@ -163,10 +176,10 @@ while IFS= read -r key; do
     textSize) queue "$key" "" omarchy display text size "$value" ;;
 
     hyprLook.*)
-      seen_group hyprLook || queue "$key" hyprLook bash "$ROOT/set-hypr-look.sh" "$(merged_group hyprLook)"
+      seen_group hyprLook || queue_stdin "$key" hyprLook "$(merged_group hyprLook)" bash "$ROOT/set-hypr-look.sh"
       ;;
     hyprInput.*)
-      seen_group hyprInput || queue "$key" hyprInput bash "$ROOT/set-hypr-input.sh" "$(merged_group hyprInput)"
+      seen_group hyprInput || queue_stdin "$key" hyprInput "$(merged_group hyprInput)" bash "$ROOT/set-hypr-input.sh"
       ;;
     hyprNoGaps) queue "$key" "" omarchy hyprland toggle window-no-gaps ;;
     hyprSquareAspect) queue "$key" "" omarchy hyprland toggle single-window-aspect-ratio ;;
@@ -221,16 +234,19 @@ while IFS= read -r key; do
     # `managed` is a fact about where a row currently lives, not part of the
     # row, so it never travels to the writer.
     bindings)
-      queue "$key" bindings bash "$ROOT/set-hypr-bindings.sh" \
-        "$(jq -c '{items: [.[] | {keys, label, command, unbind}]}' <<<"$(plan_list "$key")")"
+      queue_stdin "$key" bindings \
+        "$(jq -c '{items: [.[] | {keys, label, command, unbind}]}' <<<"$(plan_list "$key")")" \
+        bash "$ROOT/set-hypr-bindings.sh"
       ;;
     windowRules)
-      queue "$key" windowRules bash "$ROOT/set-hypr-windows.sh" \
-        "$(jq -c '{items: [.[] | del(.managed)]}' <<<"$(plan_list "$key")")"
+      queue_stdin "$key" windowRules \
+        "$(jq -c '{items: [.[] | del(.managed)]}' <<<"$(plan_list "$key")")" \
+        bash "$ROOT/set-hypr-windows.sh"
       ;;
     autostart)
-      queue "$key" autostart bash "$ROOT/set-hypr-autostart.sh" \
-        "$(jq -c '{commands: [.[] | .command]}' <<<"$(plan_list "$key")")"
+      queue_stdin "$key" autostart \
+        "$(jq -c '{commands: [.[] | .command]}' <<<"$(plan_list "$key")")" \
+        bash "$ROOT/set-hypr-autostart.sh"
       ;;
 
     hostname) queue "$key" "" bash "$ROOT/set-hostname.sh" "$value" ;;
@@ -288,14 +304,25 @@ results=()
 for i in "${!RUN_KEYS[@]}"; do
   key=${RUN_KEYS[$i]}
   mapfile -d '' -t argv < <(base64 -d <<<"${RUN_CMDS[$i]}")
+  stdin_payload=${RUN_STDIN[$i]:-}
   if [[ $DRY -eq 1 ]]; then
-    printf '%s\t%s\n' "$key" "$(printf '%q ' "${argv[@]}")"
+    # A dry run is for reading, so show what would be sent rather than only
+    # how big it is. Long payloads are cut so one change stays one line.
+    shown=""
+    if [[ -n $stdin_payload ]]; then
+      if (( ${#stdin_payload} > 400 )); then
+        shown="  <stdin ${#stdin_payload} bytes> ${stdin_payload:0:400}…"
+      else
+        shown="  <stdin> $stdin_payload"
+      fi
+    fi
+    printf '%s\t%s%s\n' "$key" "$(printf '%q ' "${argv[@]}")" "$shown"
     results+=("$(jq -nc --arg k "$key" '{key:$k, status:"dry-run"}')")
     continue
   fi
   # Combined, not stderr alone: omarchy reports its failures on stdout, so
   # capturing stderr by itself left every failure with an empty reason.
-  if err=$("${argv[@]}" 2>&1); then
+  if err=$(if [[ -n $stdin_payload ]]; then printf '%s' "$stdin_payload" | "${argv[@]}" 2>&1; else "${argv[@]}" 2>&1; fi); then
     results+=("$(jq -nc --arg k "$key" '{key:$k, status:"applied"}')")
   else
     status=1

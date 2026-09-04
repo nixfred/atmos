@@ -33,7 +33,11 @@ atmos_hypr_apply() {
   if (( reset )); then
     python3 "$ROOT/hypr-sentinel.py" "$kind" reset "$file"
   elif [[ -n $ATMOS_HYPR_JSON ]]; then
-    python3 "$ROOT/hypr-sentinel.py" "$kind" apply "$file" "$ATMOS_HYPR_JSON"
+    # Down stdin, which hypr-sentinel already reads when no JSON argument is
+    # given. As an argument a long list hits the kernel's 128 KiB limit on a
+    # single argv entry and the exec fails with "Argument list too long",
+    # which is a confusing way to be told a keybinding list was too big.
+    printf '%s' "$ATMOS_HYPR_JSON" | python3 "$ROOT/hypr-sentinel.py" "$kind" apply "$file"
   else
     python3 "$ROOT/hypr-sentinel.py" "$kind" apply "$file"
   fi

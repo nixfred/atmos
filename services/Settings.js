@@ -833,6 +833,39 @@ function pad2(n) {
   return n < 10 ? "0" + n : String(n)
 }
 
+// What the file says about itself. A plan tells you what would change; this
+// tells you what you are about to trust, which is the other half of reading
+// a settings file before running it.
+function fileSummary(doc, plan) {
+  var meta = (doc && doc.meta) || {}
+  var sections = (doc && doc.sections) || {}
+  var lines = []
+
+  var host = String(meta.hostname || "")
+  var when = String(meta.exported || "")
+  if (host || when) {
+    lines.push("From " + (host || "an unnamed machine") +
+      (when ? ", exported " + when.replace("T", " ").replace(/\..*$/, "").replace("Z", " UTC") : ""))
+  }
+
+  var hardware = String(meta.hardware || "")
+  if (hardware) lines.push("Hardware: " + hardware)
+
+  var names = []
+  for (var id in sections) {
+    if (Object.prototype.hasOwnProperty.call(sections, id)) names.push(id)
+  }
+  names.sort()
+  if (names.length > 0) lines.push(countLabel(names.length, "section", "sections") + ": " + names.join(", "))
+
+  if (plan) {
+    var settled = plan.unchanged.length
+    if (settled > 0) lines.push(settled + " of these already match this machine.")
+  }
+
+  return lines.join("\n")
+}
+
 // ---------------------------------------------------------------------------
 // Rendering a plan
 // ---------------------------------------------------------------------------

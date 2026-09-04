@@ -30,6 +30,10 @@ PrefsPage {
   property string importStatus: ""
   property string writtenPath: ""
   property var plan: null
+  property var lastDoc: null
+  // Set once an import has run, so the way back is offered where you are
+  // looking rather than buried in a row further down.
+  property int appliedCount: 0
 
   // Derived rather than assigned, so it cannot be left stuck on by a path
   // that forgot to clear it.
@@ -161,6 +165,8 @@ PrefsPage {
   function doApply() {
     if (!root.planHasChanges) return
     root.importStatus = ""
+    applyProc.pending = root.plan.changes.length
+    applyProc.undoing = false
     applyProc.text = SettingsJs.planToJson(root.plan)
     applyProc.command = ["bash", root.applyScript]
     applyProc.running = true
@@ -168,6 +174,7 @@ PrefsPage {
 
   function doUndo() {
     root.importStatus = ""
+    applyProc.undoing = true
     applyProc.text = ""
     // --no-backup, or undoing would leave a way back of its own and a
     // second undo would put the import straight back.
@@ -226,6 +233,7 @@ PrefsPage {
         return
       }
       var doc = SettingsJs.parseSettingsMarkdown(String(readOut.text || ""))
+      root.lastDoc = doc
       root.plan = SettingsJs.planImport(doc, Omarchy.snapshotData, null, {
         hardware: Omarchy.dmiProduct
       })
@@ -245,12 +253,22 @@ PrefsPage {
       if (text.length > 0) write(text)
       stdinEnabled = false
     }
+    property int pending: 0
+    property bool undoing: false
     onExited: function(exitCode) {
-      root.plan = null
       var err = String(applyErr.text || "").replace(/^\s+|\s+$/g, "")
-      root.importStatus = exitCode === 0
-        ? "Applied. Atmos kept a way back in ~/.local/state/atmos/imports."
-        : (err.length > 0 ? err : "Some changes did not apply.")
+      if (applyProc.undoing) {
+        root.appliedCount = 0
+        root.importStatus = exitCode === 0
+          ? "Put back."
+          : (err.length > 0 ? err : "Could not put everything back.")
+      } else {
+        root.plan = null
+        root.appliedCount = exitCode === 0 ? applyProc.pending : 0
+        root.importStatus = exitCode === 0
+          ? "Applied " + applyProc.pending + ". Try it, and put it back below if you do not like it."
+          : (err.length > 0 ? err : "Some changes did not apply.")
+      }
       Omarchy.scheduleRefresh()
     }
   }
@@ -381,6 +399,24 @@ PrefsPage {
     }
 
     PrefsRow {
+      label: "This file"
+      description: "Where it came from."
+      query: root.query
+      available: !!root.lastDoc && SettingsJs.fileSummary(root.lastDoc, root.plan).length > 0
+      stretchControl: true
+      keywords: ["origin", "host", "when", "sections", "provenance"]
+
+      PrefsText {
+        width: parent.width
+        text: root.lastDoc ? SettingsJs.fileSummary(root.lastDoc, root.plan) : ""
+        color: Theme.muted
+        font.family: Theme.fontFamily
+        font.pixelSize: Theme.fontSize
+        wrapMode: Text.Wrap
+      }
+    }
+
+    PrefsRow {
       label: "Changes"
       description: root.planSummary
       query: root.query
@@ -450,13 +486,16 @@ PrefsPage {
     }
 
     PrefsRow {
-      label: "Undo the last import"
-      description: "Puts back the values the last import replaced."
+      label: "Put it back"
+      description: root.appliedCount > 0
+        ? "Restores the " + root.appliedCount + " values that import replaced. Try the machine first."
+        : "Restores the values the last import replaced."
       query: root.query
-      keywords: ["undo", "revert", "restore", "back"]
+      keywords: ["undo", "revert", "restore", "back", "put back"]
 
       PrefsButton {
-        text: "Undo"
+        text: "Put it back"
+        primary: root.appliedCount > 0
         enabled: !root.working
         onClicked: undoConfirm.ask()
       }
