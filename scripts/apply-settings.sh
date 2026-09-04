@@ -35,6 +35,7 @@ if [[ -z ${ATMOS_SKIP_HYPR:-} ]] && ! hyprctl version >/dev/null 2>&1; then
 fi
 export ATMOS_SKIP_HYPR=${ATMOS_SKIP_HYPR:-0}
 DRY=0
+PROGRESS=0
 NO_BACKUP=0
 PLAN_FILE=""
 SNAPSHOT_FILE=""
@@ -43,11 +44,12 @@ BACKUP_DIR=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     --dry-run) DRY=1; shift ;;
+    --progress) PROGRESS=1; shift ;;
     --no-backup) NO_BACKUP=1; shift ;;
     --plan) PLAN_FILE=${2:-}; shift 2 ;;
     --snapshot) SNAPSHOT_FILE=${2:-}; shift 2 ;;
     --backup) BACKUP_DIR=${2:-}; shift 2 ;;
-    *) echo "Usage: apply-settings.sh [--dry-run] [--no-backup] [--plan <file>] [--snapshot <file>] [--backup <dir>]" >&2; exit 2 ;;
+    *) echo "Usage: apply-settings.sh [--dry-run] [--progress] [--no-backup] [--plan <file>] [--snapshot <file>] [--backup <dir>]" >&2; exit 2 ;;
   esac
 done
 
@@ -366,6 +368,11 @@ for i in "${!RUN_KEYS[@]}"; do
   key=${RUN_KEYS[$i]}
   mapfile -d '' -t argv < <(base64 -d <<<"${RUN_CMDS[$i]}")
   stdin_payload=${RUN_STDIN[$i]:-}
+  # Named before it runs, not after: a writer that takes seconds should not
+  # leave the window looking stuck with nothing to read.
+  if [[ $PROGRESS -eq 1 && $DRY -eq 0 ]]; then
+    printf 'progress\t%s\t%s\t%s\n' "$((i + 1))" "${#RUN_KEYS[@]}" "$key"
+  fi
   if [[ $DRY -eq 1 ]]; then
     # A dry run is for reading, so show what would be sent rather than only
     # how big it is. Long payloads are cut so one change stays one line.

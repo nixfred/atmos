@@ -154,31 +154,37 @@ function settingsCatalog() {
     entry("hostname", "system", "Hostname", "identity", {
       type: "string",
       hostBound: true,
-      consequence: "The machine renames itself. Anything that reaches it by name, including SSH configs and Tailscale, sees the new one."
+      consequence: "The machine renames itself. Anything that reaches it by name, including SSH configs and Tailscale, sees the new one.",
+      needsRoot: true
     }),
     entry("timezone", "system", "Timezone", "identity", {
       type: "string",
       options: "timezones",
-      consequence: "The clock jumps. Calendar reminders shift with it."
+      consequence: "The clock jumps. Calendar reminders shift with it.",
+      needsRoot: true
     }),
     entry("locale", "system", "Locale", "identity", {
       type: "string",
       options: "locales",
-      consequence: "Date, number, and sort order change. Running apps keep the old locale until they restart."
+      consequence: "Date, number, and sort order change. Running apps keep the old locale until they restart.",
+      needsRoot: true
     }),
     entry("keyboardLayout", "system", "Keyboard layout", "identity", {
       type: "string",
       options: "keyboardLayouts",
-      consequence: "Keys remap immediately. A layout you cannot type on is hard to undo with the keyboard."
+      consequence: "Keys remap immediately. A layout you cannot type on is hard to undo with the keyboard.",
+      needsRoot: true
     }),
     entry("ntp", "system", "Network time", "identity", {
       type: "boolean",
-      consequence: "Turning network time off lets the clock drift until you set it by hand."
+      consequence: "Turning network time off lets the clock drift until you set it by hand.",
+      needsRoot: true
     }),
     entry("fullName", "system", "Full name", "identity", { type: "string" }),
     entry("parallelDownloads", "system", "Parallel downloads", "identity", {
       type: "integer",
-      consequence: "Edits /etc/pacman.conf. Only affects how fast updates fetch."
+      consequence: "Edits /etc/pacman.conf. Only affects how fast updates fetch.",
+      needsRoot: true
     }),
     entry("dns", "network", "DNS", "identity", {
       type: "string",
@@ -319,6 +325,9 @@ function entry(key, section, label, tier, opts) {
     type: String(o.type || "string"),
     options: String(o.options || ""),
     hostBound: o.hostBound === true,
+    // Written by a script that raises privileges with pkexec, so applying it
+    // pops a password dialog.
+    needsRoot: o.needsRoot === true,
     consequence: String(o.consequence || ""),
     importable: tier !== "system"
   }
@@ -836,6 +845,33 @@ function planImport(doc, snapshot, keys, options) {
   changes.sort(function(a, b) { return a.key < b.key ? -1 : (a.key > b.key ? 1 : 0) })
   unchanged.sort()
   return result(changes, unchanged, warnings, blocked)
+}
+
+// How many of these will stop and ask for a password. Each writer raises
+// privileges on its own, so they ask one at a time rather than once.
+function passwordCount(plan) {
+  var list = (plan && plan.changes) || []
+  var byKey = catalogByKey()
+  var n = 0
+  for (var i = 0; i < list.length; i++) {
+    var item = byKey[list[i].key]
+    if (item && item.needsRoot) n++
+  }
+  return n
+}
+
+// What to expect before pressing the button: how much, how long, and
+// whether it will interrupt you.
+function applyForecast(plan) {
+  var changes = ((plan && plan.changes) || []).length
+  if (changes === 0) return ""
+  var asks = passwordCount(plan)
+  var lines = [countLabel(changes, "change", "changes") + ", a few seconds."]
+  if (asks > 0) {
+    lines.push(countLabel(asks, "change asks", "changes ask") +
+      " for your password, and they ask one at a time. Cancelling one skips that change and the rest carry on.")
+  }
+  return lines.join("\n")
 }
 
 function result(changes, unchanged, warnings, blocked) {

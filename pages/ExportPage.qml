@@ -34,6 +34,10 @@ PrefsPage {
   // Set once an import has run, so the way back is offered where you are
   // looking rather than buried in a row further down.
   property int appliedCount: 0
+  // Progress, streamed from the executor as each change is reached.
+  property int stepNow: 0
+  property int stepTotal: 0
+  property string stepKey: ""
 
   // Derived rather than assigned, so it cannot be left stuck on by a path
   // that forgot to clear it.
@@ -167,8 +171,11 @@ PrefsPage {
     root.importStatus = ""
     applyProc.pending = root.plan.changes.length
     applyProc.undoing = false
+    root.stepNow = 0
+    root.stepTotal = root.plan.changes.length
+    root.stepKey = ""
     applyProc.text = SettingsJs.planToJson(root.plan)
-    applyProc.command = ["bash", root.applyScript]
+    applyProc.command = ["bash", root.applyScript, "--progress"]
     applyProc.running = true
   }
 
@@ -249,6 +256,17 @@ PrefsPage {
     command: ["true"]
     stdinEnabled: true
     stderr: StdioCollector { id: applyErr; waitForEnd: true }
+    // Line by line rather than collected at the end, so the page can say
+    // what is happening while it happens.
+    stdout: SplitParser {
+      onRead: function(line) {
+        var parts = String(line).split("\t")
+        if (parts[0] !== "progress") return
+        root.stepNow = Number(parts[1]) || 0
+        root.stepTotal = Number(parts[2]) || root.stepTotal
+        root.stepKey = String(parts[3] || "")
+      }
+    }
     onStarted: {
       if (text.length > 0) write(text)
       stdinEnabled = false
@@ -257,6 +275,8 @@ PrefsPage {
     property bool undoing: false
     onExited: function(exitCode) {
       var err = String(applyErr.text || "").replace(/^\s+|\s+$/g, "")
+      root.stepNow = 0
+      root.stepKey = ""
       if (applyProc.undoing) {
         root.appliedCount = 0
         root.importStatus = exitCode === 0
@@ -472,16 +492,36 @@ PrefsPage {
 
     PrefsRow {
       label: "Apply the plan you just read"
-      description: "Runs exactly the changes listed above."
+      description: root.plan ? SettingsJs.applyForecast(root.plan) : "Runs exactly the changes listed above."
       query: root.query
       available: root.planHasChanges
-      keywords: ["apply", "import", "run"]
+      keywords: ["apply", "import", "run", "password"]
 
       PrefsButton {
         text: "Apply"
         danger: true
         enabled: !root.working
         onClicked: applyConfirm.ask()
+      }
+    }
+
+    PrefsRow {
+      label: "Applying"
+      description: root.stepKey.length > 0
+        ? root.stepKey + "  (" + root.stepNow + " of " + root.stepTotal + ")"
+        : "Working…"
+      query: root.query
+      available: applyProc.running
+      stretchControl: true
+      keywords: ["progress", "applying"]
+
+      PrefsProgress {
+        width: parent.width
+        from: 0
+        to: Math.max(1, root.stepTotal)
+        value: root.stepNow
+        indeterminate: root.stepTotal === 0
+        valueText: root.stepTotal > 0 ? root.stepNow + " / " + root.stepTotal : ""
       }
     }
 
@@ -525,7 +565,8 @@ PrefsPage {
     id: applyConfirm
     title: "Apply these settings?"
     message: root.plan
-      ? root.planSummary + ". Atmos writes a way back first, and Undo puts it all back."
+      ? SettingsJs.applyForecast(root.plan) +
+        "\n\nAtmos writes a way back first, and Put it back restores every one of them."
       : ""
     confirmText: "Apply"
     onConfirmed: root.doApply()

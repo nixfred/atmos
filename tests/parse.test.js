@@ -1492,3 +1492,33 @@ const wantsMissing = settings.planImport(
   null, {}
 )
 assertEqual(wantsMissing.blocked.length, 1, 'a value the machine does not have is still blocked')
+
+// Before pressing apply: how much, and whether it will interrupt you.
+const rootPlan = settings.planImport(
+  settings.parseSettingsMarkdown(
+    '```toml atmos:meta\nschema = 1\n```\n' +
+    '```toml atmos:system\nhostname = "elsewhere"\ntimezone = "Europe/Berlin"\n```\n' +
+    '```toml atmos:defaults\nbrowser = "brave"\n```\n'
+  ),
+  { hostname: 'vic', timezone: 'America/New_York', timezones: ['Europe/Berlin'], browser: 'firefox' },
+  null, {}
+)
+assertEqual(rootPlan.changes.length, 3, 'three changes planned')
+assertEqual(settings.passwordCount(rootPlan), 2, 'two of them raise privileges')
+const forecast = settings.applyForecast(rootPlan)
+assert(forecast.indexOf('3 changes') === 0, 'the forecast leads with the count')
+assert(forecast.indexOf('2 changes ask for your password') !== -1, 'the forecast counts the prompts')
+assert(forecast.indexOf('one at a time') !== -1, 'the forecast says they come one at a time')
+
+const quietPlan = settings.planImport(
+  settings.parseSettingsMarkdown(
+    '```toml atmos:meta\nschema = 1\n```\n```toml atmos:defaults\nbrowser = "brave"\n```\n'
+  ),
+  { browser: 'firefox' }, null, {}
+)
+assertEqual(settings.passwordCount(quietPlan), 0, 'a cosmetic plan asks for nothing')
+assert(
+  settings.applyForecast(quietPlan).indexOf('password') === -1,
+  'a plan that needs no password does not mention one'
+)
+assertEqual(settings.applyForecast({changes:[]}), '', 'no changes, no forecast')
