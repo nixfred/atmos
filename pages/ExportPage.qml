@@ -14,14 +14,18 @@ PrefsPage {
 
   readonly property string home: Quickshell.env("HOME")
   readonly property string applyScript: Omarchy.shellDir + "/scripts/apply-settings.sh"
-  readonly property string defaultName: "atmos-settings.md"
+  // Regenerated on use rather than held, so the stamp is the moment you
+  // exported and not the moment the page happened to load.
+  function suggestedName() {
+    return SettingsJs.exportFileName(Omarchy.hostname, new Date())
+  }
 
   // Section id -> included. Seeded from the catalog, so a section added
   // there appears here without this page being told about it.
   property var sections: ({})
 
-  property string exportPath: home + "/" + defaultName
-  property string importPath: home + "/" + defaultName
+  property string exportPath: ""
+  property string importPath: ""
   property string exportStatus: ""
   property string importStatus: ""
   property string writtenPath: ""
@@ -77,8 +81,15 @@ PrefsPage {
   // would produce a file nothing recognises as a settings file.
   function withMarkdownSuffix(path) {
     var text = String(path || "")
-    if (text.length === 0) return root.home + "/" + root.defaultName
+    if (text.length === 0) return root.home + "/" + root.suggestedName()
     return /\.md$/i.test(text) ? text : text + ".md"
+  }
+
+  // Opens on the folder last used, with a fresh name already filled in.
+  function chooseExportFile() {
+    exportFileDialog.currentFolder = root.folderUrl(root.exportPath)
+    exportFileDialog.currentFile = root.folderUrl(root.exportPath) + "/" + root.suggestedName()
+    exportFileDialog.open()
   }
 
   // ---- state -------------------------------------------------------------
@@ -301,7 +312,7 @@ PrefsPage {
       PrefsButton {
         text: "Choose…"
         enabled: !root.working
-        onClicked: exportFileDialog.open()
+        onClicked: root.chooseExportFile()
       }
     }
 
@@ -341,7 +352,9 @@ PrefsPage {
 
     PrefsRow {
       label: "File to read"
-      description: root.importPath
+      // Left empty rather than guessed: a suggested name here would point
+      // at a file that does not exist.
+      description: root.importPath.length > 0 ? root.importPath : "No file chosen yet."
       query: root.query
       keywords: ["path", "file", "import", "load", "browse", "open"]
 
@@ -362,7 +375,7 @@ PrefsPage {
 
       PrefsButton {
         text: "Review"
-        enabled: !root.working
+        enabled: !root.working && root.importPath.length > 0
         onClicked: root.doReview()
       }
     }
@@ -457,7 +470,6 @@ PrefsPage {
     title: "Write the settings file"
     fileMode: FileDialog.SaveFile
     nameFilters: ["Settings files (*.md)", "All files (*)"]
-    currentFolder: root.folderUrl(root.exportPath)
     onAccepted: root.exportPath = root.withMarkdownSuffix(RichUi.pathFromUrl(selectedFile))
   }
 
@@ -490,6 +502,9 @@ PrefsPage {
 
   Component.onCompleted: {
     root.resetSections()
+    // Seeded here rather than in the property, so the name carries this
+    // machine's hostname once Omarchy has read it.
+    root.exportPath = root.home + "/" + root.suggestedName()
     applyConfirm.parent = root.prefsOverlay
     undoConfirm.parent = root.prefsOverlay
   }

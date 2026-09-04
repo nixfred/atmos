@@ -787,6 +787,41 @@ function sameValue(a, b) {
   return a === b
 }
 
+// A name that says what the file is, whose machine it came from, and when
+// it was taken, because these files pile up in a downloads folder and
+// "atmos-settings.md" tells you nothing about which one you want.
+//
+//   atmos-export-vic-2026-09-03-1930.md
+//
+// Local time rather than UTC: the person reading the folder listing is the
+// person who made it. The date leads the time so the names sort by age.
+function exportFileName(hostname, when) {
+  var host = fileSafe(hostname)
+  // Duck-typed rather than instanceof: a Date made in another QML or JS
+  // context is not an instance of this context's Date.
+  var usable = !!when && typeof when.getTime === "function" && !isNaN(when.getTime())
+  var date = usable ? when : new Date()
+  var stamp = date.getFullYear() +
+    "-" + pad2(date.getMonth() + 1) +
+    "-" + pad2(date.getDate()) +
+    "-" + pad2(date.getHours()) + pad2(date.getMinutes())
+  return "atmos-export-" + (host.length > 0 ? host + "-" : "") + stamp + ".md"
+}
+
+// Hostnames are usually tame, but a name is only useful if it is also a
+// filename, so anything that is not a letter, digit, or dash goes.
+function fileSafe(value) {
+  return String(value === null || value === undefined ? "" : value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+}
+
+function pad2(n) {
+  return n < 10 ? "0" + n : String(n)
+}
+
 // ---------------------------------------------------------------------------
 // Rendering a plan
 // ---------------------------------------------------------------------------
