@@ -249,6 +249,67 @@ while IFS= read -r key; do
         bash "$ROOT/set-hypr-autostart.sh"
       ;;
 
+    audioOutputVolume) queue "$key" "" bash "$ROOT/set-audio.sh" output-volume "$value" ;;
+    audioInputVolume) queue "$key" "" bash "$ROOT/set-audio.sh" input-volume "$value" ;;
+    audioOutputMuted)
+      toggle_needed "$key" && queue "$key" "" omarchy audio output volume mute-toggle
+      ;;
+    audioInputMuted)
+      toggle_needed "$key" && queue "$key" "" omarchy audio input mute
+      ;;
+    audioTuningOn) queue "$key" "" omarchy audio tuning "$([[ $value == true ]] && echo on || echo off)" ;;
+
+    powerProfileAc) queue "$key" "" omarchy powerprofiles set ac "$value" ;;
+    powerProfileBattery) queue "$key" "" omarchy powerprofiles set battery "$value" ;;
+    # The verb names the state being turned off, so the argument is inverted.
+    suspendEnabled)
+      toggle_needed "$key" && queue "$key" "" omarchy toggle suspend-off "$([[ $value == true ]] && echo off || echo on)"
+      ;;
+    crashCapture)
+      toggle_needed "$key" && queue "$key" "" omarchy toggle crash capture
+      ;;
+
+    clockBirthYear) queue "$key" clock omarchy bar set omarchy.clock birthYear "$value" --json ;;
+    clockLifeExpectancy) queue "$key" clock omarchy bar set omarchy.clock lifeExpectancy "$value" --json ;;
+    indicatorsAlwaysShow) queue "$key" clock omarchy bar set omarchy.indicators alwaysShow "$(bool_arg "$value")" --json ;;
+    powerShowPercentage) queue "$key" clock omarchy bar set omarchy.power showPercentage "$(bool_arg "$value")" --json ;;
+    spacerSize) queue "$key" clock omarchy bar set omarchy.spacer size "$value" --json ;;
+    weatherUnit) queue "$key" clock omarchy bar set omarchy.weather unit "$value" ;;
+    weatherRefreshMinutes) queue "$key" clock omarchy bar set omarchy.weather refreshMinutes "$value" --json ;;
+    weatherLocation)
+      if [[ -z $value ]]; then
+        queue "$key" "" omarchy weather location --clear
+      else
+        queue "$key" "" omarchy weather location --set "$value"
+      fi
+      ;;
+    agentsRefreshIntervalSec) queue "$key" clock omarchy bar set omarchy.agents refreshIntervalSec "$value" --json ;;
+    agentsSync) queue "$key" clock omarchy bar set omarchy.agents syncMode "$([[ $value == true ]] && echo On || echo Off)" ;;
+    agentsSyncDir) queue "$key" clock omarchy bar set omarchy.agents syncDir "$value" ;;
+    agentsSyncFileName) queue "$key" clock omarchy bar set omarchy.agents syncFileName "$value" ;;
+
+    indicatorsItems)
+      queue "$key" clock bash "$ROOT/set-bar-widget.sh" omarchy.indicators items "$(plan_list "$key")"
+      ;;
+    trayHidden)
+      queue "$key" clock bash "$ROOT/set-bar-widget.sh" omarchy.tray hidden "$(plan_list "$key")"
+      ;;
+    trayPinned)
+      queue "$key" clock bash "$ROOT/set-bar-widget.sh" omarchy.tray pinned "$(plan_list "$key")"
+      ;;
+
+    plymouth) queue "$key" "" omarchy plymouth set by theme "$value" ;;
+
+    touchpadEnabled)
+      toggle_needed "$key" && queue "$key" "" omarchy toggle touchpad "$([[ $value == true ]] && echo on || echo off)"
+      ;;
+    touchscreenEnabled)
+      toggle_needed "$key" && queue "$key" "" omarchy toggle touchscreen "$([[ $value == true ]] && echo on || echo off)"
+      ;;
+    bluetooth)
+      toggle_needed "$key" && queue "$key" "" omarchy bluetooth power "$([[ $value == true ]] && echo on || echo off)"
+      ;;
+
     hostname) queue "$key" "" bash "$ROOT/set-hostname.sh" "$value" ;;
     timezone) queue "$key" "" bash "$ROOT/set-timezone.sh" "$value" ;;
     locale) queue "$key" "" bash "$ROOT/set-locale.sh" "$value" ;;

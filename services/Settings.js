@@ -185,6 +185,92 @@ function settingsCatalog() {
       consequence: "All name lookups go to a different resolver. A wrong value takes the network down until you change it back."
     }),
 
+    // Sound
+    entry("audioOutputVolume", "sound", "Output volume", "behavior", {
+      type: "integer",
+      consequence: "Speaker volume jumps to the exported level the moment this applies."
+    }),
+    entry("audioInputVolume", "sound", "Input volume", "behavior", {
+      type: "integer",
+      consequence: "Microphone level changes, which callers hear before you do."
+    }),
+    entry("audioOutputMuted", "sound", "Output muted", "behavior", {
+      type: "boolean",
+      consequence: "Muting the output silences everything until you unmute it."
+    }),
+    entry("audioInputMuted", "sound", "Input muted", "behavior", {
+      type: "boolean",
+      consequence: "Muting the microphone is silent from your side; nobody hears you."
+    }),
+    entry("audioTuningOn", "sound", "Audio tuning", "look", { type: "boolean" }),
+
+    // Power
+    entry("powerProfileAc", "power", "Profile on mains", "behavior", {
+      type: "string",
+      options: "powerProfiles",
+      consequence: "Changes how hard the machine runs while plugged in."
+    }),
+    entry("powerProfileBattery", "power", "Profile on battery", "behavior", {
+      type: "string",
+      options: "powerProfiles",
+      consequence: "Changes the trade between speed and battery life when unplugged."
+    }),
+    entry("suspendEnabled", "power", "Suspend", "behavior", {
+      type: "boolean",
+      consequence: "Turning suspend off means a closed lid keeps running and draining."
+    }),
+    entry("crashCapture", "power", "Capture crashes", "look", { type: "boolean" }),
+
+    // Bar widgets
+    entry("clockBirthYear", "bar", "Birth year", "look", { type: "integer" }),
+    entry("clockLifeExpectancy", "bar", "Life expectancy", "look", { type: "integer" }),
+    entry("indicatorsAlwaysShow", "bar", "Always show indicators", "look", { type: "boolean" }),
+    entry("powerShowPercentage", "bar", "Battery percentage", "look", { type: "boolean" }),
+    entry("spacerSize", "bar", "Spacer width", "look", { type: "integer" }),
+    entry("weatherLocation", "bar", "Weather location", "look", {
+      type: "string",
+      consequence: "The bar reports weather for the exported town, which is rarely the one you are in."
+    }),
+    entry("weatherUnit", "bar", "Weather unit", "look", { type: "string" }),
+    entry("weatherRefreshMinutes", "bar", "Weather refresh", "look", { type: "integer" }),
+    entry("agentsRefreshIntervalSec", "bar", "Agents refresh", "look", { type: "integer" }),
+    entry("agentsSync", "bar", "Sync agents", "behavior", {
+      type: "boolean",
+      consequence: "Turning sync on starts writing an agents file into the folder below."
+    }),
+    entry("agentsSyncDir", "bar", "Agents sync folder", "behavior", {
+      type: "string",
+      hostBound: true,
+      consequence: "A folder from another machine will not exist here."
+    }),
+    entry("agentsSyncFileName", "bar", "Agents sync file", "look", { type: "string" }),
+
+    // Appearance and boot
+    entry("plymouth", "appearance", "Boot theme", "look", {
+      type: "string",
+      options: "plymouthThemes",
+      consequence: "Changes the splash shown while the machine starts."
+    }),
+    // screensaverBranded and aboutBranded are reported by the snapshot as
+    // booleans, but the writer takes image, text, or reset. There is no
+    // honest mapping from true back to one of those, so they stay out.
+
+    // Devices. Tied to this machine's hardware, so they travel badly.
+    entry("touchpadEnabled", "input", "Touchpad", "behavior", {
+      type: "boolean",
+      hostBound: true,
+      consequence: "Turning the touchpad off on a laptop with no mouse attached leaves you without a pointer."
+    }),
+    entry("touchscreenEnabled", "input", "Touchscreen", "behavior", {
+      type: "boolean",
+      hostBound: true
+    }),
+    entry("bluetooth", "network", "Bluetooth radio", "behavior", {
+      type: "boolean",
+      hostBound: true,
+      consequence: "Turning the radio off drops every connected device, including a mouse or headset."
+    }),
+
     // Lists. A whole list is replaced at once, because these are the
     // settings people actually mean when they say they want to hand someone
     // their desktop.
@@ -193,6 +279,15 @@ function settingsCatalog() {
     }),
     listEntry("windowRules", "Window rules", {
       consequence: "Rules about which windows float, centre, or open on a given workspace are replaced. Rules naming an app you do not have simply never match."
+    }),
+    listEntry("indicatorsItems", "Bar indicators", {
+      consequence: "Replaces which indicators the bar shows and in what order."
+    }),
+    listEntry("trayHidden", "Hidden tray icons", {
+      consequence: "Replaces which tray icons are folded away. Icons for apps you do not have simply never appear."
+    }),
+    listEntry("trayPinned", "Pinned tray icons", {
+      consequence: "Replaces which tray icons stay visible."
     }),
     listEntry("autostart", "Startup programs", {
       consequence: "The programs Hyprland launches at login are replaced. A program you do not have installed fails quietly at the next login."
@@ -263,8 +358,13 @@ function settingsSections() {
     { id: "idle", title: "Idle and light", note: "Locking, the screensaver, night light, and notifications." },
     { id: "input", title: "Input", note: "Pointer and touchpad. Tuned per device, so it travels badly." },
     { id: "network", title: "Network", note: "Resolver choice. Wi-Fi passwords are never exported." },
+    { id: "sound", title: "Sound", note: "Volumes and muting. These take effect the moment they apply." },
+    { id: "power", title: "Power", note: "Profiles on mains and battery, suspend, crash capture." },
     { id: "bindings", title: "Keybindings", note: "Every shortcut, Super key and all. The list is replaced whole." },
     { id: "windowRules", title: "Window rules", note: "Which windows float, centre, or open somewhere specific." },
+    { id: "indicatorsItems", title: "Bar indicators", note: "Which indicators the bar shows, in order." },
+    { id: "trayHidden", title: "Hidden tray icons", note: "Tray icons folded away behind the chevron." },
+    { id: "trayPinned", title: "Pinned tray icons", note: "Tray icons kept visible." },
     { id: "autostart", title: "Startup programs", note: "What Hyprland launches when you log in." },
     { id: "system", title: "System", note: "Machine identity. Off by default when you import." },
     { id: "security", title: "Security", note: "Reported so you can read it. Atmos will not import anything here." }
@@ -671,6 +771,17 @@ function planImport(doc, snapshot, keys, options) {
       if (selected && !selected[key]) continue
 
       var to = values[key]
+      var from = readValue(snap, key)
+
+      // Settled before anything is validated. A value the machine already
+      // holds needs no permission to stay: plymouth reports "default" as
+      // its theme while the installable themes list does not contain it,
+      // so validating first would refuse the machine its own setting.
+      if (sameValue(from, to)) {
+        unchanged.push(key)
+        continue
+      }
+
       if (!typeMatches(item.type, to)) {
         blocked.push({ key: key, reason: item.label + " expects " + item.type + " but the file has " + describe(to) + "." })
         continue
@@ -695,12 +806,6 @@ function planImport(doc, snapshot, keys, options) {
       }
       if (item.hostBound && differentHardware) {
         warnings.push({ key: key, message: item.label + " is tied to this machine's hardware. Held back." })
-        continue
-      }
-
-      var from = readValue(snap, key)
-      if (sameValue(from, to)) {
-        unchanged.push(key)
         continue
       }
       // The sentinel writers add a block of their own and leave whatever you

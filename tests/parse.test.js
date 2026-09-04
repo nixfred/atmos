@@ -1467,3 +1467,28 @@ const anonymous = settings.parseSettingsMarkdown('```toml atmos:appearance\nthem
 const anonText = settings.fileSummary(anonymous, null)
 assert(anonText.indexOf('1 section: appearance') !== -1, 'fileSummary still describes a file with no meta')
 assertEqual(settings.fileSummary(null, null), '', 'fileSummary survives no document')
+// A value the machine already holds needs no permission to stay. Plymouth
+// reports "default" as its theme while the installable themes list does not
+// contain it, so validating before comparing refused the machine its own
+// setting and every export of that machine came back with one blocked row.
+const holdsOwnValue = settings.planImport(
+  settings.parseSettingsMarkdown(
+    '```toml atmos:meta\nschema = 1\n```\n' +
+    '```toml atmos:appearance\nplymouth = "default"\n```\n'
+  ),
+  { plymouth: 'default', plymouthThemes: ['catppuccin', 'everforest'] },
+  null, {}
+)
+assertEqual(holdsOwnValue.blocked.length, 0, 'a value the machine already holds is never blocked')
+assertEqual(holdsOwnValue.unchanged.length, 1, 'a value the machine already holds is unchanged')
+
+// Changing to something genuinely absent is still refused.
+const wantsMissing = settings.planImport(
+  settings.parseSettingsMarkdown(
+    '```toml atmos:meta\nschema = 1\n```\n' +
+    '```toml atmos:appearance\nplymouth = "not-installed"\n```\n'
+  ),
+  { plymouth: 'default', plymouthThemes: ['catppuccin', 'everforest'] },
+  null, {}
+)
+assertEqual(wantsMissing.blocked.length, 1, 'a value the machine does not have is still blocked')
