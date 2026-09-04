@@ -459,6 +459,7 @@ ShellRoot {
 
         PrefsFlickable {
           id: navFlick
+          diagName: "NAV"
           anchors.left: parent.left
           anchors.right: parent.right
           anchors.top: searchBox.bottom

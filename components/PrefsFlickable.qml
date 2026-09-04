@@ -33,6 +33,7 @@ Flickable {
   // 1 keeps Input → Scroll speed as the only speed control; pixelDelta
   // already includes compositor scroll_factor.
   property real scrollFactor: 1
+  property string diagName: "flick"
 
   contentWidth: width
   flickableDirection: Flickable.VerticalFlick
@@ -41,17 +42,33 @@ Flickable {
   // against its own bounds.
   interactive: contentHeight > height
 
+  // Did the view move at all, by any path?
+  onContentYChanged: console.log("PR8MOVE", diagName, contentY.toFixed(1))
+  Component.onCompleted: console.log("PR8INIT", diagName, "h=" + height.toFixed(0), "ch=" + contentHeight.toFixed(0), "interactive=" + interactive)
+
   // On the viewport, not contentItem. NoButton means it never takes a
   // press, so every control on the page still works. Disabled when the
   // Flickable is not the scroller so an embedded page does not take the
   // wheel on its way to the pane that does.
   MouseArea {
     parent: root
-    anchors.fill: root
+    // Not anchors.fill: root — Flickable reparents its children onto
+    // contentItem, and the anchor is resolved against that, so root is
+    // neither parent nor sibling and the fill is refused. Explicit size.
+    width: root.width
+    height: root.height
+    id: wheelArea
     acceptedButtons: Qt.NoButton
     enabled: root.interactive
 
+    onWidthChanged: console.log("PR8AREA-W", root.diagName, "w=" + width.toFixed(0), "h=" + height.toFixed(0))
+    Component.onCompleted: console.log("PR8AREA", root.diagName,
+      "w=" + width.toFixed(0), "h=" + height.toFixed(0),
+      "parentIsRoot=" + (parent === root), "enabled=" + enabled)
+
     onWheel: function(wheel) {
+      console.log("PR8DIAG", root.diagName, "px=" + wheel.pixelDelta.y, "ang=" + wheel.angleDelta.y,
+        "at=" + wheel.x.toFixed(0) + "," + wheel.y.toFixed(0), "cy=" + root.contentY.toFixed(0))
       var max = Math.max(0, root.contentHeight - root.height)
       if (max <= 0) {
         wheel.accepted = false
