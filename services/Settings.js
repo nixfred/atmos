@@ -787,6 +787,45 @@ function sameValue(a, b) {
   return a === b
 }
 
+// ---------------------------------------------------------------------------
+// Rendering a plan
+// ---------------------------------------------------------------------------
+//
+// The page shows these as text. Building them here rather than in QML keeps
+// the wording under test.
+
+function changeLines(plan) {
+  var list = (plan && plan.changes) || []
+  var out = []
+  for (var i = 0; i < list.length; i++) {
+    var change = list[i]
+    var line = "• " + change.label + ": " + shownValue(change.from) + " → " + shownValue(change.to)
+    if (change.consequence) line += "\n    " + change.consequence
+    out.push(line)
+  }
+  return out.join("\n")
+}
+
+function warningLines(plan) {
+  var list = (plan && plan.warnings) || []
+  var out = []
+  for (var i = 0; i < list.length; i++) out.push("• " + list[i].message)
+  return out.join("\n")
+}
+
+function blockedLines(plan) {
+  var list = (plan && plan.blocked) || []
+  var out = []
+  for (var i = 0; i < list.length; i++) out.push("• " + list[i].reason)
+  return out.join("\n")
+}
+
+// A value as a person would read it, including the ones that are absent.
+function shownValue(value) {
+  if (value === null || value === undefined || value === "") return "not set"
+  return displayValue(value)
+}
+
 // The plan as the executor reads it. `scripts/apply-settings.sh` takes this
 // on stdin, so the review screen and the executor cannot disagree about what
 // is being applied. Each change carries `from` as well as `value`, which is

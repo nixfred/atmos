@@ -1333,3 +1333,63 @@ const alreadyManaged = settings.planImport(
   null, {}
 )
 assertEqual(alreadyManaged.warnings.length, 0, 'rows Atmos already owns need no warning')
+
+// Plan rendering lives in the service so the wording stays under test.
+const renderPlan = settings.planImport(
+  settings.parseSettingsMarkdown(
+    '```toml atmos:meta\nschema = 1\n```\n' +
+    '```toml atmos:defaults\nbrowser = "brave"\n```\n' +
+    '```toml atmos:security\nsshdEnabled = true\n```\n'
+  ),
+  { browser: 'firefox', sshdEnabled: false },
+  null,
+  {}
+)
+const changeText = settings.changeLines(renderPlan)
+assert(changeText.indexOf('• Browser: firefox → brave') === 0, 'changeLines reads as a sentence')
+assert(changeText.indexOf('\n    Every link') !== -1, 'changeLines indents the consequence under the change')
+assert(settings.blockedLines(renderPlan).indexOf('• ') === 0, 'blockedLines bullets each refusal')
+assertEqual(settings.changeLines(null), '', 'changeLines survives no plan')
+assertEqual(settings.warningLines(null), '', 'warningLines survives no plan')
+assertEqual(settings.blockedLines(null), '', 'blockedLines survives no plan')
+
+assertEqual(settings.shownValue(''), 'not set', 'an empty value reads as not set')
+assertEqual(settings.shownValue(null), 'not set', 'a missing value reads as not set')
+assertEqual(settings.shownValue(false), 'off', 'false reads as off, not as missing')
+assertEqual(settings.shownValue(0), '0', 'zero reads as zero, not as missing')
+
+// PrefsRow's control slot takes its size from children[0], so a second
+// direct child is drawn on top of the first. Wrap them in a Row instead.
+function overlappingControlRows() {
+  const found = []
+  const dirs = ['pages', 'components']
+  for (const dir of dirs) {
+    const full = path.join(__dirname, '..', dir)
+    for (const name of fs.readdirSync(full)) {
+      if (!name.endsWith('.qml')) continue
+      const lines = fs.readFileSync(path.join(full, name), 'utf8').split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        if (!/^\s*PrefsRow\s*\{/.test(lines[i])) continue
+        const base = lines[i].length - lines[i].trimStart().length
+        let depth = 1
+        const kids = []
+        for (let j = i + 1; j < lines.length && depth > 0; j++) {
+          const line = lines[j]
+          const indent = line.length - line.trimStart().length
+          const child = line.match(/^\s*([A-Z][A-Za-z0-9_]*)\s*\{/)
+          if (child && depth === 1 && indent === base + 2) kids.push(child[1])
+          depth += (line.split('{').length - 1) - (line.split('}').length - 1)
+        }
+        if (kids.length > 1) found.push(`${dir}/${name}:${i + 1} (${kids.join(', ')})`)
+      }
+    }
+  }
+  return found
+}
+
+const overlapping = overlappingControlRows()
+assertEqual(
+  overlapping.join(' '),
+  '',
+  'no PrefsRow stacks two controls on top of each other'
+)

@@ -14,46 +14,88 @@ PrefsPage {
 
   readonly property string home: Quickshell.env("HOME")
   readonly property string applyScript: Omarchy.shellDir + "/scripts/apply-settings.sh"
+  readonly property string defaultName: "atmos-settings.md"
 
-  // Section id -> included. Seeded from the catalog so a new section shows
-  // up here without this page having to be told about it.
+  // Section id -> included. Seeded from the catalog, so a section added
+  // there appears here without this page being told about it.
   property var sections: ({})
-  property string exportPath: home + "/atmos-settings.md"
-  property bool exportWritten: false
-  property string importPath: home + "/atmos-settings.md"
 
+  property string exportPath: home + "/" + defaultName
+  property string importPath: home + "/" + defaultName
   property string exportStatus: ""
   property string importStatus: ""
+  property string writtenPath: ""
   property var plan: null
-  property bool working: false
+
+  // Derived rather than assigned, so it cannot be left stuck on by a path
+  // that forgot to clear it.
+  readonly property bool working: writeProc.running || readProc.running || applyProc.running
 
   readonly property var sectionList: SettingsJs.selectableSections()
 
-  function chosenSections() {
-    var out = []
+  // Reads root.sections so the binding re-runs when a switch moves. A
+  // function call on its own would not be tracked.
+  readonly property var chosenKeys: {
+    var chosen = root.sections
+    var ids = []
     for (var i = 0; i < root.sectionList.length; i++) {
       var id = root.sectionList[i].id
-      if (root.sections[id]) out.push(id)
+      if (chosen[id]) ids.push(id)
     }
-    return out
+    return SettingsJs.keysForSections(ids)
   }
 
-  readonly property var chosenKeys: {
-    var _ = root.sections
-    return SettingsJs.keysForSections(root.chosenSections())
+  readonly property int chosenSectionCount: {
+    var chosen = root.sections
+    var n = 0
+    for (var i = 0; i < root.sectionList.length; i++)
+      if (chosen[root.sectionList[i].id]) n++
+    return n
   }
+
+  readonly property string planSummary: root.plan ? root.plan.summary : ""
+  readonly property bool planHasChanges: !!root.plan && root.plan.changes.length > 0
+
+  // ---- paths -------------------------------------------------------------
+
+  // A path typed with a leading tilde never reaches a shell that would
+  // expand it, so it would arrive at the writer as a literal directory.
+  function realPath(path) {
+    var text = String(path || "")
+    if (text === "~") return root.home
+    if (text.indexOf("~/") === 0) return root.home + text.slice(1)
+    return text
+  }
+
+  function folderUrl(path) {
+    var text = root.realPath(path)
+    var cut = text.lastIndexOf("/")
+    return "file://" + (cut > 0 ? text.slice(0, cut) : root.home)
+  }
+
+  // The save dialog has no default suffix, so a name typed without one
+  // would produce a file nothing recognises as a settings file.
+  function withMarkdownSuffix(path) {
+    var text = String(path || "")
+    if (text.length === 0) return root.home + "/" + root.defaultName
+    return /\.md$/i.test(text) ? text : text + ".md"
+  }
+
+  // ---- state -------------------------------------------------------------
 
   function setSection(id, on) {
     var next = {}
-    for (var k in root.sections) next[k] = root.sections[k]
+    for (var key in root.sections) next[key] = root.sections[key]
     next[id] = on
     root.sections = next
+    root.forgetExport()
   }
 
   function setAllSections(on) {
     var next = {}
     for (var i = 0; i < root.sectionList.length; i++) next[root.sectionList[i].id] = on
     root.sections = next
+    root.forgetExport()
   }
 
   function resetSections() {
@@ -63,55 +105,35 @@ PrefsPage {
     root.sections = next
   }
 
-  readonly property string planSummary: root.plan ? root.plan.summary : ""
-  readonly property bool planHasChanges: !!root.plan && root.plan.changes.length > 0
-
-  function lines(list, render) {
-    var out = []
-    for (var i = 0; i < list.length; i++) out.push(render(list[i]))
-    return out.join("\n")
+  // What was written is only worth offering to open while it still matches
+  // what the page would write now.
+  function forgetExport() {
+    root.writtenPath = ""
+    root.exportStatus = ""
   }
 
-  function shown(value) {
-    return value === null || value === undefined || value === "" ? "not set" : SettingsJs.displayValue(value)
+  // A plan belongs to one file. Point at another and the old plan is a lie.
+  function forgetPlan() {
+    root.plan = null
+    root.importStatus = ""
   }
 
-  readonly property string changeText: root.plan
-    ? lines(root.plan.changes, function(c) {
-        var head = "• " + c.label + ": " + shown(c.from) + " → " + shown(c.to)
-        return c.consequence ? head + "\n    " + c.consequence : head
-      })
-    : ""
+  onExportPathChanged: root.forgetExport()
+  onImportPathChanged: root.forgetPlan()
 
-  readonly property string warningText: root.plan
-    ? lines(root.plan.warnings, function(w) { return "• " + w.message })
-    : ""
-
-  readonly property string blockedText: root.plan
-    ? lines(root.plan.blocked, function(b) { return "• " + b.reason })
-    : ""
+  // ---- actions -----------------------------------------------------------
 
   function doExport() {
-    var keys = root.chosenKeys
-    var text = SettingsJs.exportMarkdown(Omarchy.snapshotData, keys, {
+    if (root.chosenKeys.length === 0) return
+    var text = SettingsJs.exportMarkdown(Omarchy.snapshotData, root.chosenKeys, {
       exported: new Date().toISOString(),
       hardware: Omarchy.dmiProduct
     })
-    root.exportStatus = ""
-    root.exportWritten = false
-    root.working = true
+    root.forgetExport()
+    writeProc.target = root.realPath(root.exportPath)
     writeProc.text = text
-    writeProc.command = ["sh", "-c", "cat > \"$1\"", "sh", root.realPath(root.exportPath)]
+    writeProc.command = ["sh", "-c", "cat > \"$1\"", "sh", writeProc.target]
     writeProc.running = true
-  }
-
-  // A path typed with a leading ~ never reaches a shell that would expand
-  // it, so it would arrive at the writer as a literal directory name.
-  function realPath(path) {
-    var text = String(path || "")
-    if (text === "~") return root.home
-    if (text.indexOf("~/") === 0) return root.home + text.slice(1)
-    return text
   }
 
   function openFile(path) {
@@ -120,9 +142,7 @@ PrefsPage {
   }
 
   function doReview() {
-    root.plan = null
-    root.importStatus = ""
-    root.working = true
+    root.forgetPlan()
     readProc.command = ["cat", root.realPath(root.importPath)]
     readProc.running = true
   }
@@ -130,7 +150,6 @@ PrefsPage {
   function doApply() {
     if (!root.planHasChanges) return
     root.importStatus = ""
-    root.working = true
     applyProc.text = SettingsJs.planToJson(root.plan)
     applyProc.command = ["bash", root.applyScript]
     applyProc.running = true
@@ -138,43 +157,61 @@ PrefsPage {
 
   function doUndo() {
     root.importStatus = ""
-    root.working = true
     applyProc.text = ""
+    // --no-backup, or undoing would leave a way back of its own and a
+    // second undo would put the import straight back.
     applyProc.command = ["sh", "-c",
       "d=$(ls -1d \"$HOME\"/.local/state/atmos/imports/*/ 2>/dev/null | tail -1); " +
-      "[ -n \"$d\" ] || { echo 'no import to undo' >&2; exit 1; }; " +
+      "[ -n \"$d\" ] || { echo 'There is no import to undo.' >&2; exit 1; }; " +
       "bash \"$1\" --no-backup --plan \"$d/undo.json\"", "sh", root.applyScript]
     applyProc.running = true
   }
 
+  // ---- processes ---------------------------------------------------------
+
   Process {
     id: writeProc
     property string text: ""
+    property string target: ""
     command: ["true"]
     stdinEnabled: true
+    stderr: StdioCollector { id: writeErr; waitForEnd: true }
     onStarted: {
       write(text)
+      // cat only finishes when its input ends.
       stdinEnabled = false
     }
     onExited: function(exitCode) {
-      root.working = false
-      root.exportWritten = exitCode === 0
-      root.exportStatus = exitCode === 0
-        ? "Wrote " + root.chosenKeys.length + " settings to " + root.exportPath
-        : "Could not write " + root.exportPath
+      if (exitCode === 0) {
+        root.writtenPath = writeProc.target
+        root.exportStatus = "Wrote " + root.chosenKeys.length + " settings to " + writeProc.target
+        return
+      }
+      var err = String(writeErr.text || "").replace(/^\s+|\s+$/g, "")
+      root.exportStatus = err.length > 0 ? err : "Could not write " + writeProc.target
     }
   }
 
-  Process { id: openProc; command: ["true"] }
+  Process {
+    id: openProc
+    command: ["true"]
+    stderr: StdioCollector { id: openErr; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode === 0) return
+      var err = String(openErr.text || "").replace(/^\s+|\s+$/g, "")
+      root.exportStatus = err.length > 0 ? err : "Nothing on this machine opens that file."
+    }
+  }
 
   Process {
     id: readProc
     command: ["true"]
     stdout: StdioCollector { id: readOut; waitForEnd: true }
+    stderr: StdioCollector { id: readErr; waitForEnd: true }
     onExited: function(exitCode) {
-      root.working = false
       if (exitCode !== 0) {
-        root.importStatus = "Could not read " + root.importPath
+        var err = String(readErr.text || "").replace(/^\s+|\s+$/g, "")
+        root.importStatus = err.length > 0 ? err : "Could not read " + root.importPath
         return
       }
       var doc = SettingsJs.parseSettingsMarkdown(String(readOut.text || ""))
@@ -198,7 +235,6 @@ PrefsPage {
       stdinEnabled = false
     }
     onExited: function(exitCode) {
-      root.working = false
       root.plan = null
       var err = String(applyErr.text || "").replace(/^\s+|\s+$/g, "")
       root.importStatus = exitCode === 0
@@ -208,6 +244,8 @@ PrefsPage {
     }
   }
 
+  // ---- export ------------------------------------------------------------
+
   PrefsGroup {
     title: "Export"
     query: root.query
@@ -215,21 +253,24 @@ PrefsPage {
 
     PrefsRow {
       label: "Sections"
-      description: root.chosenKeys.length + " settings selected across "
-        + root.chosenSections().length + " sections."
+      description: root.chosenKeys.length + " settings across " + root.chosenSectionCount + " sections."
       query: root.query
       keywords: ["all", "none", "select", "sections", "choose"]
 
-      PrefsButton {
-        text: "All"
-        enabled: !root.working
-        onClicked: root.setAllSections(true)
-      }
+      Row {
+        spacing: 8
 
-      PrefsButton {
-        text: "None"
-        enabled: !root.working
-        onClicked: root.setAllSections(false)
+        PrefsButton {
+          text: "All"
+          enabled: !root.working
+          onClicked: root.setAllSections(true)
+        }
+
+        PrefsButton {
+          text: "None"
+          enabled: !root.working
+          onClicked: root.setAllSections(false)
+        }
       }
     }
 
@@ -252,16 +293,15 @@ PrefsPage {
     }
 
     PrefsRow {
-      label: "File"
-      description: "Where to write it."
+      label: "Where to write it"
+      description: root.exportPath
       query: root.query
-      keywords: ["path", "file", "markdown", "md"]
+      keywords: ["path", "file", "folder", "directory", "markdown", "md", "save", "choose"]
 
-      PrefsField {
-        value: root.exportPath
-        placeholder: root.home + "/atmos-settings.md"
+      PrefsButton {
+        text: "Choose…"
         enabled: !root.working
-        onEdited: function(value) { root.exportPath = value }
+        onClicked: exportFileDialog.open()
       }
     }
 
@@ -269,24 +309,30 @@ PrefsPage {
       label: "Write the file"
       description: root.exportStatus.length > 0
         ? root.exportStatus
-        : root.presetCount + " settings will be written."
+        : "Writes the sections switched on above."
       query: root.query
-      keywords: ["export", "save", "write", "backup"]
+      keywords: ["export", "save", "write", "backup", "open"]
 
-      PrefsButton {
-        text: "Export"
-        primary: true
-        enabled: !root.working && root.exportPath.length > 0 && root.chosenKeys.length > 0
-        onClicked: root.doExport()
-      }
+      Row {
+        spacing: 8
 
-      PrefsButton {
-        text: "Open"
-        enabled: root.exportWritten && !root.working
-        onClicked: root.openFile(root.exportPath)
+        PrefsButton {
+          text: "Export"
+          primary: true
+          enabled: !root.working && root.chosenKeys.length > 0
+          onClicked: root.doExport()
+        }
+
+        PrefsButton {
+          text: "Open"
+          enabled: !root.working && root.writtenPath.length > 0
+          onClicked: root.openFile(root.writtenPath)
+        }
       }
     }
   }
+
+  // ---- import ------------------------------------------------------------
 
   PrefsGroup {
     title: "Import"
@@ -294,20 +340,13 @@ PrefsPage {
     detail: "Nothing is applied until you have read the plan. Atmos compares the file against this machine, shows every change with what it will do, and writes a way back before it touches anything."
 
     PrefsRow {
-      label: "File"
-      description: "The file to read."
+      label: "File to read"
+      description: root.importPath
       query: root.query
-      keywords: ["path", "file", "import", "load"]
-
-      PrefsField {
-        value: root.importPath
-        placeholder: root.home + "/atmos-settings.md"
-        enabled: !root.working
-        onEdited: function(value) { root.importPath = value }
-      }
+      keywords: ["path", "file", "import", "load", "browse", "open"]
 
       PrefsButton {
-        text: "Browse"
+        text: "Browse…"
         enabled: !root.working
         onClicked: importFileDialog.open()
       }
@@ -315,13 +354,15 @@ PrefsPage {
 
     PrefsRow {
       label: "See what it would do"
-      description: root.importStatus.length > 0 ? root.importStatus : "Reads the file and compares it against this machine. Changes nothing."
+      description: root.importStatus.length > 0
+        ? root.importStatus
+        : "Reads the file and compares it against this machine. Changes nothing."
       query: root.query
       keywords: ["review", "dry run", "preview", "plan", "diff"]
 
       PrefsButton {
         text: "Review"
-        enabled: !root.working && root.importPath.length > 0
+        enabled: !root.working
         onClicked: root.doReview()
       }
     }
@@ -330,14 +371,13 @@ PrefsPage {
       label: "Changes"
       description: root.planSummary
       query: root.query
-      available: !!root.plan
+      available: root.planHasChanges
       stretchControl: true
       keywords: ["changes", "plan"]
 
       PrefsText {
         width: parent.width
-        visible: root.changeText.length > 0
-        text: root.changeText
+        text: root.plan ? SettingsJs.changeLines(root.plan) : ""
         color: Theme.foreground
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSize
@@ -346,16 +386,16 @@ PrefsPage {
     }
 
     PrefsRow {
-      label: "Warnings"
-      description: "Things that will still happen, but that you should know about."
+      label: "Worth knowing"
+      description: "These still happen."
       query: root.query
-      available: root.warningText.length > 0
+      available: !!root.plan && root.plan.warnings.length > 0
       stretchControl: true
-      keywords: ["warning", "hardware", "skipped"]
+      keywords: ["warning", "hardware", "skipped", "shadow"]
 
       PrefsText {
         width: parent.width
-        text: root.warningText
+        text: root.plan ? SettingsJs.warningLines(root.plan) : ""
         color: Theme.foreground
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSize
@@ -367,13 +407,13 @@ PrefsPage {
       label: "Blocked"
       description: "Atmos will not do these."
       query: root.query
-      available: root.blockedText.length > 0
+      available: !!root.plan && root.plan.blocked.length > 0
       stretchControl: true
       keywords: ["blocked", "refused", "security"]
 
       PrefsText {
         width: parent.width
-        text: root.blockedText
+        text: root.plan ? SettingsJs.blockedLines(root.plan) : ""
         color: Theme.urgent
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSize
@@ -410,21 +450,24 @@ PrefsPage {
     }
   }
 
+  // ---- dialogs -----------------------------------------------------------
+
+  FileDialog {
+    id: exportFileDialog
+    title: "Write the settings file"
+    fileMode: FileDialog.SaveFile
+    nameFilters: ["Settings files (*.md)", "All files (*)"]
+    currentFolder: root.folderUrl(root.exportPath)
+    onAccepted: root.exportPath = root.withMarkdownSuffix(RichUi.pathFromUrl(selectedFile))
+  }
+
   FileDialog {
     id: importFileDialog
     title: "Open a settings file"
+    fileMode: FileDialog.OpenFile
     nameFilters: ["Settings files (*.md)", "All files (*)"]
-    onAccepted: {
-      root.importPath = RichUi.pathFromUrl(selectedFile)
-      root.plan = null
-      root.importStatus = ""
-    }
-  }
-
-  Component.onCompleted: {
-    root.resetSections()
-    applyConfirm.parent = root.prefsOverlay
-    undoConfirm.parent = root.prefsOverlay
+    currentFolder: root.folderUrl(root.importPath)
+    onAccepted: root.importPath = RichUi.pathFromUrl(selectedFile)
   }
 
   PrefsConfirm {
@@ -443,5 +486,11 @@ PrefsPage {
     message: "Puts back the values the last import replaced."
     confirmText: "Undo"
     onConfirmed: root.doUndo()
+  }
+
+  Component.onCompleted: {
+    root.resetSections()
+    applyConfirm.parent = root.prefsOverlay
+    undoConfirm.parent = root.prefsOverlay
   }
 }
