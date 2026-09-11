@@ -2405,6 +2405,90 @@ QtObject {
     lastError = ""
   }
 
+  // Lab: the machine's default coding agent, asked one question, headless.
+  //
+  // It is the agent the user already chose through Omarchy, reached in its
+  // non-interactive mode, so the answer lands in this window instead of a
+  // terminal opening over whatever they were doing. omarchy-agent launches a
+  // TUI, which is right for a keybinding and wrong here; agent-ask.sh maps
+  // the same configured default onto codex exec, claude -p, grok --single
+  // and the rest.
+  readonly property string agentAskScript: shellDir + "/scripts/agent-ask.sh"
+  property bool labAgentBusy: false
+  property string labAgentAnswer: ""
+  property string labAgentError: ""
+  property int labAgentSeconds: 0
+  property string labAgentStdin: ""
+  property string labAgentName: "your agent"
+
+  function labAskAgent(prompt) {
+    var text = String(prompt || "")
+    if (!text || root.labAgentBusy) return
+    root.labAgentBusy = true
+    root.labAgentAnswer = ""
+    root.labAgentError = ""
+    root.labAgentSeconds = 0
+    root.labAgentStdin = text
+    labAgentProc.command = ["bash", root.agentAskScript]
+    labAgentProc.running = true
+  }
+
+  // Which agent, by name, so the UI can say "Asking codex" rather than
+  // "asking the agent". Resolved once, lazily, and it is only a label.
+  function labProbeAgent() {
+    if (!Lab.on("askbar")) return
+    labAgentNameProc.command = [
+      "bash", "-c",
+      "command -v omarchy-default-agent >/dev/null 2>&1 && omarchy-default-agent 2>/dev/null || true"
+    ]
+    labAgentNameProc.running = true
+  }
+
+  property Process labAgentNameProc: Process {
+    command: ["true"]
+    stdout: StdioCollector { id: labAgentNameOut; waitForEnd: true }
+    onExited: function (exitCode) {
+      if (exitCode !== 0) return
+      var name = String(labAgentNameOut.text || "").replace(/^\s+|\s+$/g, "")
+      if (name) root.labAgentName = name
+    }
+  }
+
+  // An agent reports no progress, so there is no percentage to show. Elapsed
+  // seconds is what is actually known, and it is enough to prove it is alive.
+  property Timer labAgentTick: Timer {
+    interval: 1000
+    repeat: true
+    running: root.labAgentBusy
+    onTriggered: root.labAgentSeconds += 1
+  }
+
+  property Process labAgentProc: Process {
+    command: ["true"]
+    stdinEnabled: true
+    stdout: StdioCollector { id: labAgentOut; waitForEnd: true }
+    stderr: StdioCollector { id: labAgentErr; waitForEnd: true }
+    onStarted: {
+      if (root.labAgentStdin.length > 0) {
+        write(root.labAgentStdin)
+        root.labAgentStdin = ""
+        // Closed after the write, or an agent reading to EOF waits forever.
+        stdinEnabled = false
+      }
+    }
+    onExited: function (exitCode) {
+      root.labAgentBusy = false
+      if (exitCode !== 0) {
+        root.labAgentError = String(labAgentErr.text || "the agent did not answer")
+          .replace(/^\s+|\s+$/g, "")
+          .split("\n")[0]
+        return
+      }
+      root.labAgentAnswer = String(labAgentOut.text || "").replace(/^\s+|\s+$/g, "")
+      if (!root.labAgentAnswer) root.labAgentError = "the agent returned nothing"
+    }
+  }
+
   // Lab: one Atmos at a time, for real.
   //
   // Quickshell already refuses a second instance of the same config path,

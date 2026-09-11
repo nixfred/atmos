@@ -31,10 +31,12 @@ PrefsPage {
   readonly property var result: root.asked.length > 0 ? AskJs.resolve(root.hubs, root.asked) : null
   readonly property var matches: root.result && root.result.matches ? root.result.matches : []
   readonly property var agentRead: Omarchy.labAgentAnswer.length > 0
-    ? AskJs.readLocalAnswer(Omarchy.labAgentAnswer, root.hubs)
+    ? AskJs.readAnswer(Omarchy.labAgentAnswer, root.hubs)
     : null
 
   signal goToHub(string hubId)
+
+  Component.onCompleted: Omarchy.labProbeAgent()
 
   function ask(text) {
     var q = String(text || "").replace(/^\s+|\s+$/g, "")
@@ -51,7 +53,7 @@ PrefsPage {
     for (var i = 0; i < root.hubs.length; i++) {
       if (root.hubs[i] && root.hubs[i].title) titles.push(root.hubs[i].title)
     }
-    Omarchy.labAskAgent(AskJs.localPrompt(root.asked, titles))
+    Omarchy.labAskAgent(AskJs.agentPrompt(root.asked, titles))
   }
 
   PrefsGroup {

@@ -234,10 +234,10 @@ function resolve(hubs, query) {
   };
 }
 
-// Pull the page name back out. A small model will sometimes wrap it in
-// prose no matter what the prompt said, so match the label if it is there
-// and fall back to scanning for any known page name.
-function readLocalAnswer(text, hubs) {
+// Pull the page name back out. An agent will sometimes wrap it in prose no
+// matter how firmly the prompt said not to, so match the label when it is
+// there and otherwise scan for any known page name.
+function readAnswer(text, hubs) {
   var raw = String(text || "");
   var list = Array.isArray(hubs) ? hubs : [];
   var page = "";
@@ -270,18 +270,23 @@ function readLocalAnswer(text, hubs) {
   return { target: target, what: what };
 }
 
+// Asked of the machine's configured agent. The shape is deliberately rigid
+// and matches what readAnswer parses: a page name from a fixed list and one
+// sentence. An agent given room to write prose writes prose, and then the
+// only useful part -- which page -- has to be guessed at.
 function agentPrompt(query, hubTitles) {
   var q = String(query || "").replace(/^\s+|\s+$/g, "");
   if (!q) return "";
   var titles = Array.isArray(hubTitles) ? hubTitles.join(", ") : "";
   return (
-    "I am in Atmos, the Omarchy settings app, and I want: " +
+    "These are the pages of Atmos, the Omarchy settings app:\n" +
+    titles +
+    "\n\nThe user wants: " +
     q +
-    "\n\n" +
-    "Do not change anything. Tell me which settings page this lives on and " +
-    "what exactly you would change, naming the config file and the command, " +
-    "so I can approve it myself.\n\n" +
-    (titles ? "Atmos pages: " + titles + "\n" : "")
+    "\n\nDo not change anything on this machine. Answer in exactly two short " +
+    "lines and nothing else.\n" +
+    "Line 1: PAGE: <one page name from the list above>\n" +
+    "Line 2: WHAT: <one sentence on what to change there>\n"
   );
 }
 
