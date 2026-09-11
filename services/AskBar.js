@@ -238,6 +238,64 @@ function resolve(hubs, query) {
 // as a request for a plan, never for an action, so the agent's own output is
 // something a person reads and approves rather than something that already
 // happened.
+// What a local model is asked. Deliberately narrow: name one page and say
+// what you would change, in two lines. A small model on a laptop GPU is good
+// at picking from a list and bad at open-ended prose, so the prompt is a
+// multiple-choice question rather than an invitation to write.
+//
+// It is still not allowed to act. The answer is read by a person; nothing
+// parses it into a command.
+function localPrompt(query, hubTitles) {
+  var q = String(query || "").replace(/^\s+|\s+$/g, "");
+  if (!q) return "";
+  var titles = Array.isArray(hubTitles) ? hubTitles.join(", ") : "";
+  return (
+    "These are the pages of a Linux desktop settings app:\n" +
+    titles +
+    "\n\nThe user wants: " +
+    q +
+    "\n\nAnswer in exactly two short lines and nothing else.\n" +
+    "Line 1: PAGE: <one page name from the list above>\n" +
+    "Line 2: WHAT: <one sentence on what to change there>\n"
+  );
+}
+
+// Pull the page name back out. A small model will sometimes wrap it in
+// prose no matter what the prompt said, so match the label if it is there
+// and fall back to scanning for any known page name.
+function readLocalAnswer(text, hubs) {
+  var raw = String(text || "");
+  var list = Array.isArray(hubs) ? hubs : [];
+  var page = "";
+  var m = raw.match(/PAGE:\s*([^\n\r]+)/i);
+  if (m) page = m[1].replace(/^\s+|\s+$/g, "").replace(/[.*_`"']/g, "");
+  var target = null;
+  var i;
+  if (page) {
+    for (i = 0; i < list.length; i++) {
+      if (list[i] && norm(list[i].title) === norm(page)) {
+        target = list[i];
+        break;
+      }
+    }
+  }
+  if (!target) {
+    var lower = norm(raw);
+    for (i = 0; i < list.length; i++) {
+      var t = list[i] && list[i].title ? norm(list[i].title) : "";
+      if (t && lower.indexOf(t) !== -1) {
+        target = list[i];
+        break;
+      }
+    }
+  }
+  var what = "";
+  var w = raw.match(/WHAT:\s*([^\n\r]+)/i);
+  if (w) what = w[1].replace(/^\s+|\s+$/g, "");
+  else what = raw.replace(/PAGE:[^\n\r]*/i, "").replace(/^\s+|\s+$/g, "");
+  return { target: target, what: what };
+}
+
 function agentPrompt(query, hubTitles) {
   var q = String(query || "").replace(/^\s+|\s+$/g, "");
   if (!q) return "";

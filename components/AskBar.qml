@@ -33,8 +33,27 @@ Item {
   visible: active
   z: 100
 
+  readonly property bool localReady: Omarchy.labLocalUp && !Omarchy.labLocalBusy
+  readonly property var localRead: Omarchy.labLocalAnswer.length > 0
+    ? AskBarJs.readLocalAnswer(Omarchy.labLocalAnswer, root.hubs)
+    : null
+
+  function askLocal() {
+    var titles = []
+    for (var i = 0; i < root.hubs.length; i++) {
+      if (root.hubs[i] && root.hubs[i].title) titles.push(root.hubs[i].title)
+    }
+    Omarchy.labAskLocal(AskBarJs.localPrompt(root.query, titles))
+  }
+
   function open() {
     input.text = ""
+    Omarchy.labLocalAnswer = ""
+    Omarchy.labLocalError = ""
+    // Probe on open rather than at startup. A model can be started or
+    // stopped while Atmos is running, and a stale "no local model" would be
+    // wrong for the rest of the session.
+    Omarchy.labProbeLocal()
     root.active = true
     Qt.callLater(function () {
       input.forceActiveFocus()
@@ -197,9 +216,65 @@ Item {
         wrapMode: Text.WordWrap
       }
 
+      // What the local model said. Shown, never acted on -- Atmos does not
+      // parse this into a command, it offers the page as a button and lets
+      // you decide.
+      Rectangle {
+        width: parent.width
+        visible: Omarchy.labLocalBusy || Omarchy.labLocalAnswer.length > 0 || Omarchy.labLocalError.length > 0
+        implicitHeight: localCol.implicitHeight + Theme.space * 2
+        height: implicitHeight
+        color: Theme.fill(Theme.normalFill)
+        border.width: Theme.borderWidth
+        border.color: Theme.borderColor()
+        radius: Theme.radius
+
+        Column {
+          id: localCol
+          x: Theme.space
+          y: Theme.space
+          width: parent.width - Theme.space * 2
+          spacing: Theme.titleGap
+
+          Text {
+            width: parent.width
+            text: {
+              if (Omarchy.labLocalBusy) return "Asking " + Omarchy.labLocalModel + " on this machine…"
+              if (Omarchy.labLocalError.length > 0) return Omarchy.labLocalError
+              var r = root.localRead
+              return r && r.what ? r.what : Omarchy.labLocalAnswer
+            }
+            color: Omarchy.labLocalError.length > 0 ? Theme.urgent : Theme.foreground
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.labelSize
+            wrapMode: Text.WordWrap
+          }
+
+          PrefsButton {
+            visible: !!(root.localRead && root.localRead.target)
+            text: root.localRead && root.localRead.target
+              ? "Open " + root.localRead.target.title
+              : ""
+            primary: true
+            onClicked: if (root.localRead && root.localRead.target) root.go(root.localRead.target.id)
+          }
+        }
+      }
+
       Row {
         anchors.right: parent.right
         spacing: Theme.space
+
+        // Local first when a model is actually running. It is private, it
+        // costs nothing and it does not open a terminal over what you were
+        // doing. The agent stays for when there is no local model.
+        PrefsButton {
+          text: Omarchy.labLocalBusy
+            ? "Thinking…"
+            : (Omarchy.labLocalUp ? "Ask " + Omarchy.labLocalModel : "Ask locally")
+          enabled: root.query.length > 0 && root.localReady
+          onClicked: root.askLocal()
+        }
 
         PrefsButton {
           text: "Ask my agent"

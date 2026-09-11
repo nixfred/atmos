@@ -543,6 +543,104 @@ ShellRoot {
             z: 1
             spacing: 0
 
+            // Lab(askbar): Ask sits above everything, in its own section.
+            //
+            // Ctrl+K is the right key for people who already know it exists,
+            // and useless for everyone else. A settings app is used rarely
+            // enough that nobody memorises its shortcuts, so the one feature
+            // meant to answer "I do not know where this lives" cannot itself
+            // be something you have to know about.
+            Column {
+              width: navColumn.width
+              spacing: Theme.sidebarItemSpacing
+              visible: Lab.on("askbar") && root.query.length === 0
+
+              Item {
+                width: navColumn.width
+                height: askGroupLabel.implicitHeight + Theme.titleGap
+
+                Text {
+                  id: askGroupLabel
+                  anchors.left: parent.left
+                  anchors.right: parent.right
+                  anchors.bottom: parent.bottom
+                  anchors.leftMargin: Theme.pad
+                  anchors.rightMargin: Theme.pad
+                  text: "Ask"
+                  color: Theme.muted
+                  font.family: Theme.fontFamily
+                  font.pixelSize: Theme.sectionSize
+                  font.bold: true
+                  elide: Text.ElideRight
+                }
+              }
+
+              Rectangle {
+                id: askRow
+                width: navColumn.width
+                height: Theme.rowHeight
+                radius: Theme.radius
+                activeFocusOnTab: true
+                readonly property bool hovered: askMouse.containsMouse
+                color: (askRow.hovered || askRow.activeFocus) ? Theme.fill(Theme.hoverFill) : "transparent"
+
+                Accessible.role: Accessible.Button
+                Accessible.name: "Ask"
+                Accessible.description: "Describe what you want to change in plain words"
+                Accessible.onPressAction: askBar.open()
+                Keys.onReturnPressed: askBar.open()
+                Keys.onSpacePressed: askBar.open()
+
+                PrefsIcon {
+                  id: askIcon
+                  anchors.left: parent.left
+                  anchors.leftMargin: Theme.pad
+                  anchors.verticalCenter: parent.verticalCenter
+                  name: "sparkling-2-line"
+                  size: Theme.navIconSize
+                  color: (askRow.hovered || askRow.activeFocus) ? Theme.foreground : Theme.muted
+                }
+
+                Text {
+                  anchors.left: askIcon.right
+                  anchors.right: askHint.left
+                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.leftMargin: Theme.space
+                  anchors.rightMargin: Theme.space
+                  text: "Ask for anything"
+                  color: Theme.foreground
+                  font.family: Theme.fontFamily
+                  font.pixelSize: Theme.labelSize
+                  elide: Text.ElideRight
+                }
+
+                Text {
+                  id: askHint
+                  anchors.right: parent.right
+                  anchors.rightMargin: Theme.pad
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: "^K"
+                  color: Theme.muted
+                  opacity: Theme.metaOpacity
+                  font.family: Theme.fontFamily
+                  font.pixelSize: Theme.captionSize
+                }
+
+                MouseArea {
+                  id: askMouse
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: askBar.open()
+                }
+              }
+
+              Item {
+                width: navColumn.width
+                height: Theme.sidebarGroupSpacing
+              }
+            }
+
             Repeater {
               model: root.groupedPages
               delegate: Column {

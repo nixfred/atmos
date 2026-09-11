@@ -151,8 +151,8 @@ QtObject {
       id: "askbar",
       n: 2,
       title: "Ask bar",
-      blurb: "Natural language in, and either it navigates you there or it renders a plan you confirm. The agent never writes directly -- it can only ever hand you a diff.",
-      touches: "components/AskBar.qml, omarchy agent prompt"
+      blurb: "Natural language in. Its own section at the top of the sidebar, or Ctrl+K. Answers from a local model on this machine when one is running -- private and free -- and falls back to your coding agent. Neither can write a setting; both can only point.",
+      touches: "components/AskBar.qml, services/AskBar.js, Ollama, omarchy agent prompt"
     }
   ]
 

@@ -2405,6 +2405,152 @@ QtObject {
     lastError = ""
   }
 
+  // Lab(askbar): answer locally, on this machine, when a model is running.
+  //
+  // Ollama on localhost is the right first call for this feature. It is
+  // private -- the question never leaves the laptop -- it costs nothing, it
+  // needs no account, and on a box with a GPU it answers faster than a
+  // terminal can open. The coding agent stays as the fallback for when no
+  // local model is there.
+  //
+  // Detection is a probe, not an assumption: a model being installed and a
+  // server being up are different things, and the Ask bar must not offer a
+  // button that will hang.
+  property bool labLocalUp: false
+  property var labLocalModels: []
+  property string labLocalModel: ""
+  property bool labLocalBusy: false
+  property string labLocalAnswer: ""
+  property string labLocalError: ""
+
+  readonly property string labOllamaHost: {
+    var env = Quickshell.env("OLLAMA_HOST")
+    if (!env) return "http://127.0.0.1:11434"
+    if (env.indexOf("http") === 0) return env
+    return "http://" + env
+  }
+
+  function labProbeLocal() {
+    if (!Lab.on("askbar")) return
+    labLocalProbe.command = ["curl", "-sS", "--max-time", "3", root.labOllamaHost + "/api/tags"]
+    labLocalProbe.running = true
+  }
+
+  // Smallest usable model wins. This is a one-line routing question, not a
+  // reasoning task, so a 2GB model answers it instantly where a 9GB one
+  // stalls the window loading into VRAM.
+  //
+  // "Usable" has to be checked, not assumed. Picking purely by size chose
+  // nomic-embed-text, which is an embedding model: it is the smallest thing
+  // installed by a mile, it accepts a generate request, and it returns an
+  // empty response. The Ask bar sat there having asked nothing and reported
+  // nothing wrong. Embedding and reranking models are excluded by name and
+  // by family, and anything under a billion parameters is not a chat model.
+  function labLooksChatty(model) {
+    if (!model || !model.name) return false
+    var name = String(model.name).toLowerCase()
+    if (/embed|rerank|bge|minilm/.test(name)) return false
+    var details = model.details || {}
+    var family = String(details.family || "").toLowerCase()
+    if (/bert|embed/.test(family)) return false
+    var params = String(details.parameter_size || "")
+    if (/M$/i.test(params)) return false
+    return true
+  }
+
+  function labPickLocalModel(models) {
+    var list = Array.isArray(models) ? models : []
+    var best = ""
+    var bestSize = -1
+    for (var i = 0; i < list.length; i++) {
+      var m = list[i]
+      if (!root.labLooksChatty(m)) continue
+      var size = Number(m.size)
+      if (!isFinite(size)) size = 0
+      if (bestSize < 0 || size < bestSize) {
+        bestSize = size
+        best = String(m.name)
+      }
+    }
+    return best
+  }
+
+  function labAskLocal(prompt) {
+    var text = String(prompt || "")
+    if (!text || !root.labLocalUp || !root.labLocalModel) return
+    root.labLocalBusy = true
+    root.labLocalAnswer = ""
+    root.labLocalError = ""
+    var body = JSON.stringify({
+      model: root.labLocalModel,
+      prompt: text,
+      stream: false,
+      options: { temperature: 0 }
+    })
+    // Body over stdin rather than as an argument: a question can contain
+    // anything, and argv is not the place for arbitrary user text.
+    labLocalAsk.command = [
+      "curl", "-sS", "--max-time", "45",
+      "-X", "POST", root.labOllamaHost + "/api/generate",
+      "-H", "Content-Type: application/json",
+      "--data-binary", "@-"
+    ]
+    root.labLocalStdin = body
+    labLocalAsk.running = true
+  }
+
+  property string labLocalStdin: ""
+
+  property Process labLocalProbe: Process {
+    command: ["true"]
+    stdout: StdioCollector { id: labProbeOut; waitForEnd: true }
+    onExited: function (exitCode) {
+      if (exitCode !== 0) {
+        root.labLocalUp = false
+        return
+      }
+      try {
+        var parsed = JSON.parse(labProbeOut.text || "{}")
+        var models = parsed.models || []
+        root.labLocalModels = models
+        root.labLocalModel = root.labPickLocalModel(models)
+        root.labLocalUp = models.length > 0 && root.labLocalModel.length > 0
+      } catch (e) {
+        root.labLocalUp = false
+      }
+    }
+  }
+
+  property Process labLocalAsk: Process {
+    command: ["true"]
+    stdinEnabled: true
+    stdout: StdioCollector { id: labAskOut; waitForEnd: true }
+    stderr: StdioCollector { id: labAskErr; waitForEnd: true }
+    onStarted: {
+      if (root.labLocalStdin.length > 0) {
+        write(root.labLocalStdin)
+        root.labLocalStdin = ""
+        // Closed after the write, or curl waits on EOF forever.
+        stdinEnabled = false
+      }
+    }
+    onExited: function (exitCode) {
+      root.labLocalBusy = false
+      if (exitCode !== 0) {
+        root.labLocalError = String(labAskErr.text || "the local model did not answer")
+          .replace(/^\s+|\s+$/g, "")
+        return
+      }
+      try {
+        var parsed = JSON.parse(labAskOut.text || "{}")
+        root.labLocalAnswer = String(parsed.response || "").replace(/^\s+|\s+$/g, "")
+        if (!root.labLocalAnswer) root.labLocalError = "the local model returned nothing"
+      } catch (e) {
+        root.labLocalError = "could not read the local model's reply"
+      }
+    }
+  }
+
   // Lab(askbar): hand a written request to the agent. Same mechanism as
   // askAgentAboutError -- it opens the user's coding agent with a prompt and
   // nothing else. Atmos does not read a reply back or act on one, so the
