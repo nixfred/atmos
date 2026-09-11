@@ -45,6 +45,12 @@ QtObject {
   // without restarting. Null means "follow the env".
   property var overrides: ({})
 
+  // Lab(disclosure): Simple hides rows marked advanced. It never removes
+  // them -- search still finds a folded row and unfolds it -- so this is
+  // progressive disclosure and not the option-hiding people rightly hate
+  // about other settings apps.
+  property bool simpleMode: false
+
   function on(id) {
     if (!root.enabled) return false
     var key = String(id || "").toLowerCase()

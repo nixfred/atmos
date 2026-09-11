@@ -19,6 +19,12 @@ Item {
   property string valueText: ""
   property bool stretchControl: false
   property bool available: true
+
+  // Lab(disclosure): mark a row as advanced and it folds away in Simple
+  // mode. Folded is not removed -- search still reaches it and unfolds it,
+  // which is the difference between progressive disclosure and hiding
+  // options from people.
+  property bool advanced: false
   // List rows (wifi SSIDs, devices) stay out of the section modal.
   property bool sectionHelp: true
   // Find a setting indexes SettingRow blocks unless this is false.
@@ -44,7 +50,9 @@ Item {
   }
 
   readonly property bool matches: ShellConfigJs.haystackMatches(query, searchHaystack)
-  readonly property bool shown: available && matches
+  readonly property bool labFolded: Lab.on("disclosure") && root.advanced
+    && Lab.simpleMode && String(root.query || "").length === 0
+  readonly property bool shown: available && matches && !labFolded
 
   readonly property bool hovered: rowHover.hovered
 

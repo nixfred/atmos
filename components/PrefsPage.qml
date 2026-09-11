@@ -58,6 +58,32 @@ Item {
           font.family: Theme.fontFamily
           font.pixelSize: Theme.pageDescriptionSize
         }
+
+        // Lab(disclosure): Simple folds rows marked advanced; Everything
+        // shows the lot. The complaint about macOS is that it hides options
+        // and the complaint about KDE is that it drowns you, and those are
+        // the same complaint about a missing fold. Nothing is ever removed:
+        // search ignores the fold entirely, so a folded row is still one
+        // keystroke away and never a dead end.
+        Row {
+          spacing: Theme.space
+          visible: Lab.on("disclosure") && root.query.length === 0 && !root.embed && root.title.length > 0
+          topPadding: Theme.titleGap
+
+          PrefsButton {
+            text: Lab.simpleMode ? "Simple" : "Everything"
+            onClicked: Lab.simpleMode = !Lab.simpleMode
+          }
+
+          PrefsText {
+            anchors.verticalCenter: parent.verticalCenter
+            text: Lab.simpleMode ? "advanced rows folded — search still finds them" : "showing every option"
+            color: Theme.muted
+            opacity: Theme.metaOpacity
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.captionSize
+          }
+        }
       }
 
       Column {
