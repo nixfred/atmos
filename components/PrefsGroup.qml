@@ -15,6 +15,12 @@ Column {
   // Ordinary settings are a heading plus rows.
   property bool framed: false
 
+  // Lab(provenance): the config file this section actually writes, and
+  // whether Atmos owns it or only edits inside its sentinel. Opt-in per
+  // section, so a section that has not declared it renders unchanged.
+  property string writesFile: ""
+  property bool writesManaged: true
+
   width: parent ? parent.width : 640
   spacing: Theme.headingGap
   // The section stays in the layout even when it has no matching rows.
@@ -65,6 +71,32 @@ Column {
   readonly property bool showHelp: LayoutJs.sectionHelpOpen(root.helpPayload)
   readonly property int contentPad: Theme.rowPad
   readonly property int titleInset: root.framed ? root.contentPad + Theme.copyInset : Theme.copyInset
+
+  // Lab(provenance): "why is this set, and what will change on disk". The
+  // single most trust-building thing a settings panel can say, and Atmos is
+  // unusual in already knowing the answer -- it tracks managed versus
+  // hand-written config for the sentinel deferral. This only surfaces it.
+  Item {
+    width: parent.width
+    visible: Lab.on("provenance") && root.writesFile.length > 0 && root.title.length > 0
+    implicitHeight: visible ? provenanceLabel.implicitHeight + Theme.titleGap : 0
+    height: implicitHeight
+
+    Text {
+      id: provenanceLabel
+      anchors.left: parent.left
+      anchors.leftMargin: root.titleInset
+      anchors.right: parent.right
+      anchors.rightMargin: root.titleInset
+      anchors.bottom: parent.bottom
+      text: root.writesFile + (root.writesManaged ? "  ·  managed by Atmos" : "  ·  your file, Atmos edits in place")
+      color: Theme.muted
+      opacity: Theme.metaOpacity
+      font.family: Theme.fontFamily
+      font.pixelSize: Theme.captionSize
+      elide: Text.ElideMiddle
+    }
+  }
 
   Item {
     width: parent.width
