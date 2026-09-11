@@ -62,12 +62,31 @@ function sanitize(raw) {
   var text = String(raw || "");
   var dropped = [];
 
-  var start = text.indexOf("<svg");
-  var end = text.lastIndexOf("</svg>");
-  if (start === -1 || end === -1 || end <= start) {
+  // Take the LAST complete <svg>...</svg>, not the first.
+  //
+  // Agents echo their prompt. This prompt necessarily contains the literal
+  // strings "<svg" and "</svg>" in its own rules, so a first-to-last slice
+  // spans the instructions and whatever followed -- producing markup that
+  // parses as nothing. Scanning backwards finds the drawing rather than the
+  // instructions describing it.
+  var svg = "";
+  var searchFrom = text.length;
+  while (searchFrom > 0) {
+    var end = text.lastIndexOf("</svg>", searchFrom);
+    if (end === -1) break;
+    var start = text.lastIndexOf("<svg", end);
+    if (start === -1) break;
+    var candidate = text.slice(start, end + 6);
+    // A real drawing has shapes in it; the echoed rules do not.
+    if (/<(path|rect|circle|ellipse|polygon|polyline|line)\b/i.test(candidate)) {
+      svg = candidate;
+      break;
+    }
+    searchFrom = start - 1;
+  }
+  if (!svg) {
     return { svg: "", dropped: ["no svg element"] };
   }
-  var svg = text.slice(start, end + 6);
 
   var i;
   for (i = 0; i < BANNED.length; i++) {

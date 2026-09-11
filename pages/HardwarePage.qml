@@ -154,7 +154,7 @@ PrefsPage {
 
             PrefsText {
               width: parent.width
-              text: Omarchy.labAgentSeconds + "s elapsed. Drawing a whole scene usually takes 30 to 90 seconds. Leave this page open."
+              text: Omarchy.labAgentSeconds + "s elapsed. A full scene usually takes one to four minutes. Leave this page open — it is working."
               color: Theme.muted
               font.family: Theme.fontFamily
               font.pixelSize: Theme.captionSize
@@ -191,11 +191,21 @@ PrefsPage {
       stretchControl: true
 
       Item {
+        id: cardFrame
         width: parent ? parent.width : 0
-        // Drawn at full output size and scaled to fit, so the preview and
-        // the exported file cannot disagree.
+        // Drawn at full output size and scaled down to fit the column, so
+        // the preview and the exported file cannot disagree.
+        //
+        // `parent` inside a Scale does not resolve to this Item -- Scale is
+        // not an Item and the binding silently failed, leaving the card at
+        // its natural 1920x1080 inside a much narrower column. It overflowed
+        // into the rows below and looked like a layout bug because it was
+        // one. Referencing the Item by id is the fix.
         readonly property real fit: Math.min(1, (width > 0 ? width : root.cardW) / root.cardW)
-        implicitHeight: Math.round(root.cardH * fit) + Theme.space
+        implicitHeight: Math.round(root.cardH * cardFrame.fit) + Theme.space
+        // Clipped, so a mis-sized card can never again paint over its
+        // neighbours.
+        clip: true
 
         MachineCard {
           id: cardArt
@@ -204,7 +214,11 @@ PrefsPage {
           card: Omarchy.labCard
           layout: Omarchy.labCardLayout
           sceneSvg: Omarchy.labSceneSvg
-          transform: Scale { xScale: parent.fit; yScale: parent.fit }
+          transformOrigin: Item.TopLeft
+          transform: Scale {
+            xScale: cardFrame.fit
+            yScale: cardFrame.fit
+          }
         }
       }
     }
