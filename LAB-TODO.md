@@ -13,8 +13,8 @@ Master switch: `ATMOS_LAB=0` reverts everything. `ATMOS_LAB_OFF=id,id` disables 
 | 8 | Live hover preview | `hoverpreview` | DONE — themes | `737bdb7` |
 | 3 | "Why is this set?" provenance | `provenance` | DONE — section-level | `164b2ac` |
 | 7 | Simple / Everything per page | `disclosure` | DONE | `ed756c7` |
-| 5 | Preview mode (diff before write) | `previewmode` | todo | — |
-| 4 | Time machine (change history) | `timemachine` | todo | — |
+| 5 | Preview mode (diff before write) | `previewmode` | DONE | `601f9d0` |
+| 4 | Time machine (change history) | `timemachine` | DONE | `601f9d0` |
 | 10 | Keyboard-first navigation | `keyboard` | DONE | `a765d44` |
 | 9 | Machine page | `machine` | DONE | `008520a` |
 | 2 | Ask bar (agent proposes, never writes) | `askbar` | DONE | `23e38f1` |
