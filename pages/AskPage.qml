@@ -30,8 +30,8 @@ PrefsPage {
 
   readonly property var result: root.asked.length > 0 ? AskJs.resolve(root.hubs, root.asked) : null
   readonly property var matches: root.result && root.result.matches ? root.result.matches : []
-  readonly property var localRead: Omarchy.labLocalAnswer.length > 0
-    ? AskJs.readLocalAnswer(Omarchy.labLocalAnswer, root.hubs)
+  readonly property var agentRead: Omarchy.labAgentAnswer.length > 0
+    ? AskJs.readLocalAnswer(Omarchy.labAgentAnswer, root.hubs)
     : null
 
   signal goToHub(string hubId)
@@ -39,23 +39,20 @@ PrefsPage {
   function ask(text) {
     var q = String(text || "").replace(/^\s+|\s+$/g, "")
     root.asked = q
-    Omarchy.labLocalAnswer = ""
-    Omarchy.labLocalError = ""
-    if (!q) return
-    // Probe each time. A model can be started or stopped while Atmos is
-    // open, so a verdict cached at launch would be wrong for the session.
-    Omarchy.labProbeLocal()
+    Omarchy.labAgentAnswer = ""
+    Omarchy.labAgentError = ""
   }
 
-  function askLocal() {
+  // The machine's configured agent, not a second AI of Atmos's choosing.
+  // Omarchy already holds a default; asking anything else would mean a
+  // dependency the user never opted into.
+  function askAgent() {
     var titles = []
     for (var i = 0; i < root.hubs.length; i++) {
       if (root.hubs[i] && root.hubs[i].title) titles.push(root.hubs[i].title)
     }
-    Omarchy.labAskLocal(AskJs.localPrompt(root.asked, titles))
+    Omarchy.labAskAgent(AskJs.localPrompt(root.asked, titles))
   }
-
-  Component.onCompleted: Omarchy.labProbeLocal()
 
   PrefsGroup {
     title: "What do you want to change?"
@@ -113,48 +110,43 @@ PrefsPage {
   }
 
   PrefsGroup {
-    title: "Explain it"
+    title: "Ask your agent"
     query: root.query
     visible: root.asked.length > 0
-    detail: "A model running on this computer can read the question and say which page it belongs on. It never sees the internet, and it is never allowed to change a setting -- what it says is printed here for you to read."
+    detail: "Atmos hands the question to the coding agent this machine is already set up with, and prints the answer here. It never opens a terminal, and it cannot change a setting on your behalf."
 
     PrefsRow {
-      label: "Local model"
+      label: "Your agent"
       description: {
-        if (Omarchy.labLocalBusy) return "Thinking on this machine…"
-        if (Omarchy.labLocalUp) return "Running here: " + Omarchy.labLocalModel + ". Nothing leaves this computer."
-        return "No local model is answering. Atmos looks for Ollama on this machine; with none running, the matches above are all it can offer."
+        if (Omarchy.labAgentBusy)
+          return "Asking " + Omarchy.labAgentName + "… " + Omarchy.labAgentSeconds + "s so far."
+        if (Omarchy.labAgentError.length > 0)
+          return Omarchy.labAgentError
+        return "Configured default: " + Omarchy.labAgentName + ". It reads the question and says which page it belongs on."
       }
       query: root.query
-      keywords: ["ollama", "local", "llm", "model", "ai", "gpu"]
+      keywords: ["agent", "ai", "claude", "codex", "grok", "llm"]
 
       PrefsButton {
-        text: Omarchy.labLocalBusy ? "Thinking…" : "Ask it"
+        text: Omarchy.labAgentBusy ? "Thinking…" : "Ask it"
         primary: true
-        enabled: Omarchy.labLocalUp && !Omarchy.labLocalBusy && root.asked.length > 0
-        onClicked: root.askLocal()
+        enabled: !Omarchy.labAgentBusy && root.asked.length > 0
+        onClicked: root.askAgent()
       }
-    }
-
-    PrefsRow {
-      label: "It could not answer"
-      description: Omarchy.labLocalError
-      query: root.query
-      available: Omarchy.labLocalError.length > 0
     }
 
     PrefsRow {
       label: "What it said"
-      description: root.localRead && root.localRead.what ? root.localRead.what : Omarchy.labLocalAnswer
+      description: root.agentRead && root.agentRead.what ? root.agentRead.what : Omarchy.labAgentAnswer
       query: root.query
-      available: Omarchy.labLocalAnswer.length > 0
-      detail: "A small model is good at picking the right page and only guessing at the detail. Treat the page as the answer and the sentence as a hint -- it can name a setting that does not exist, which is safe here only because nothing acts on it."
+      available: Omarchy.labAgentAnswer.length > 0
+      detail: "Treat the page as the answer and the sentence as a hint. Nothing here is turned into a command."
 
       PrefsButton {
-        text: root.localRead && root.localRead.target ? "Open " + root.localRead.target.title : "No page named"
-        primary: !!(root.localRead && root.localRead.target)
-        enabled: !!(root.localRead && root.localRead.target)
-        onClicked: if (root.localRead && root.localRead.target) root.goToHub(root.localRead.target.id)
+        text: root.agentRead && root.agentRead.target ? "Open " + root.agentRead.target.title : "No page named"
+        primary: !!(root.agentRead && root.agentRead.target)
+        enabled: !!(root.agentRead && root.agentRead.target)
+        onClicked: if (root.agentRead && root.agentRead.target) root.goToHub(root.agentRead.target.id)
       }
     }
   }
