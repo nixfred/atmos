@@ -9,6 +9,7 @@ import "services/Accounts.js" as AccountsJs
 import "services/Hubs.js" as HubsJs
 import "services/Layout.js" as LayoutJs
 import "services/RichUi.js" as RichUi
+import "services/LabStatus.js" as LabStatusJs
 import "components"
 import "pages"
 import "pages/windows" as Win
@@ -26,6 +27,20 @@ ShellRoot {
   readonly property string profileHost: AccountsJs.profileHost(Omarchy.currentUser, Omarchy.hostname)
 
   readonly property var pages: HubsJs.navPages()
+
+  // Lab(statusglyph): the only state the sidebar badges read. Bound once
+  // here so a change re-evaluates this object and nothing else.
+  readonly property var labState: ({
+    systemdUnits: Omarchy.systemdUnits,
+    bluetooth: Omarchy.bluetooth,
+    bluetoothDevices: Omarchy.bluetoothDevices,
+    monitors: Omarchy.monitors,
+    netKind: Omarchy.netKind,
+    netSsid: Omarchy.netSsid,
+    disks: Omarchy.disks,
+    updateAvailable: Omarchy.updateAvailable,
+    atmosUpdateAvailable: Omarchy.atmosUpdateAvailable
+  })
 
   readonly property var groupedPages: {
     var q = root.query
@@ -560,16 +575,42 @@ ShellRoot {
 
                     Text {
                       anchors.left: navIcon.right
-                      anchors.right: parent.right
+                      anchors.right: navBadge.visible ? navBadge.left : parent.right
                       anchors.verticalCenter: parent.verticalCenter
                       anchors.leftMargin: Theme.space
-                      anchors.rightMargin: Theme.pad
+                      anchors.rightMargin: navBadge.visible ? Theme.space : Theme.pad
                       text: modelData.title
                       color: Theme.foreground
                       font.family: Theme.fontFamily
                       font.pixelSize: Theme.labelSize
                       font.bold: navItem.selected
                       elide: Text.ElideRight
+                    }
+
+                    // Lab(statusglyph): live state at the edge of the row.
+                    // Silent when there is nothing to say -- absence is the
+                    // common case and a row with no badge must look exactly
+                    // like it does on main.
+                    Text {
+                      id: navBadge
+                      anchors.right: parent.right
+                      anchors.rightMargin: Theme.pad
+                      anchors.verticalCenter: parent.verticalCenter
+                      readonly property var badge: Lab.on("statusglyph")
+                        ? LabStatusJs.forHub(modelData ? modelData.id : "", root.labState)
+                        : null
+                      visible: !!badge
+                      text: badge ? badge.text : ""
+                      color: {
+                        if (!badge) return Theme.muted
+                        if (badge.tone === "warn") return Theme.warn
+                        if (badge.tone === "ok") return Theme.ok
+                        return Theme.muted
+                      }
+                      font.family: Theme.fontFamily
+                      font.pixelSize: Theme.captionSize
+                      Accessible.role: Accessible.StaticText
+                      Accessible.name: badge ? badge.title : ""
                     }
 
                     MouseArea {
