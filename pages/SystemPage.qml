@@ -22,6 +22,12 @@ PrefsPage {
     if (id === "diagnostics") stack.push(diagnosticsPage)
     else if (id === "environment") stack.push(environmentPage)
     else if (id === "kernel") stack.push(kernelPage)
+    // Registering a child in Hubs.js is not enough on its own -- the hub has
+    // to be able to push it, or `atmos system/machine` silently lands on the
+    // System page and reports ok. Found exactly that way.
+    else if (id === "machine" && Lab.on("machine")) stack.push(labMachinePage)
+    else if (id === "history" && Lab.on("timemachine")) stack.push(labHistoryPage)
+    else if (id === "lab" && Lab.enabled) stack.push(labLabPage)
   }
 
   readonly property string diagnosticsDescription: {
@@ -36,6 +42,11 @@ PrefsPage {
   Component { id: diagnosticsPage; Sys.DiagnosticsPage {} }
   Component { id: environmentPage; Sys.EnvironmentPage {} }
   Component { id: kernelPage; Sys.KernelPage {} }
+  // Lab: the three pages this branch adds, declared the same way as the
+  // three that were already here.
+  Component { id: labMachinePage; Sys.MachinePage {} }
+  Component { id: labHistoryPage; Sys.HistoryPage {} }
+  Component { id: labLabPage; Sys.LabPage {} }
 
   PrefsConfirm {
     id: channelConfirm
@@ -790,6 +801,46 @@ PrefsPage {
       PrefsButton {
         text: "Open…"
         onClicked: root.openSubpage("kernel")
+      }
+    }
+
+    // Lab: reachable by clicking, not only by `atmos system/<page>`.
+    SettingRow {
+      label: "Machine"
+      description: "What this computer is and how it is doing, in one screen."
+      query: root.query
+      available: Lab.on("machine")
+      keywords: ["machine", "hardware", "battery", "dashboard", "cpu", "memory"]
+
+      PrefsButton {
+        text: "Open…"
+        onClicked: root.openSubpage("machine")
+      }
+    }
+
+    SettingRow {
+      label: "History"
+      description: "Every change Atmos made, and a preview mode that shows a change before it happens."
+      query: root.query
+      available: Lab.on("timemachine")
+      keywords: ["history", "undo", "changes", "preview", "audit"]
+
+      PrefsButton {
+        text: "Open…"
+        onClicked: root.openSubpage("history")
+      }
+    }
+
+    SettingRow {
+      label: "Lab"
+      description: "Proposed features, each one independent and each one reversible."
+      query: root.query
+      available: Lab.enabled
+      keywords: ["lab", "experimental", "proposed", "flags"]
+
+      PrefsButton {
+        text: "Open…"
+        onClicked: root.openSubpage("lab")
       }
     }
 
