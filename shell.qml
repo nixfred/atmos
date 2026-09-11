@@ -26,7 +26,20 @@ ShellRoot {
   readonly property string profileTitle: AccountsJs.profileTitle(Omarchy.fullName, Omarchy.currentUser)
   readonly property string profileHost: AccountsJs.profileHost(Omarchy.currentUser, Omarchy.hostname)
 
-  readonly property var pages: HubsJs.navPages()
+  // Lab(askbar): Hubs.js is plain JavaScript with no way to read the
+  // environment, so the catalogue always carries the Ask hub. The switch has
+  // to be honoured here instead, or ATMOS_LAB=0 would still show it and the
+  // "off means identical to main" contract would be a lie.
+  readonly property var pages: {
+    var all = HubsJs.navPages()
+    if (Lab.on("askbar")) return all
+    var out = []
+    for (var i = 0; i < all.length; i++) {
+      if (all[i] && all[i].id === "ask") continue
+      out.push(all[i])
+    }
+    return out
+  }
 
   // Lab(statusglyph): the only state the sidebar badges read. Bound once
   // here so a change re-evaluates this object and nothing else.
@@ -200,6 +213,20 @@ ShellRoot {
       root.loadHub(root.currentPage)
   }
 
+  // Lab(askbar): the Ask page. Its one signal is navigation -- there is no
+  // handler here that could turn an answer into a change.
+  Component {
+    id: askPage
+    AskPage {
+      query: root.query
+      onGoToHub: function (hubId) {
+        root.currentPage = hubId
+        if (searchField.text.length > 0) searchField.text = ""
+        else root.loadHub(hubId)
+      }
+    }
+  }
+
   Component { id: appearancePage; AppearancePage { query: root.query; stack: pageStack } }
   Component { id: displayPage; DisplaysPage { query: root.query } }
   Component { id: hardwarePage; HardwarePage { query: root.query } }
@@ -231,6 +258,7 @@ ShellRoot {
   Component { id: searchPage; SearchPage { query: root.query; navigator: prefsNavigator } }
 
   readonly property var pageById: ({
+    ask: askPage,
     appearance: appearancePage,
     display: displayPage,
     hardware: hardwarePage,
@@ -543,104 +571,6 @@ ShellRoot {
             z: 1
             spacing: 0
 
-            // Lab(askbar): Ask sits above everything, in its own section.
-            //
-            // Ctrl+K is the right key for people who already know it exists,
-            // and useless for everyone else. A settings app is used rarely
-            // enough that nobody memorises its shortcuts, so the one feature
-            // meant to answer "I do not know where this lives" cannot itself
-            // be something you have to know about.
-            Column {
-              width: navColumn.width
-              spacing: Theme.sidebarItemSpacing
-              visible: Lab.on("askbar") && root.query.length === 0
-
-              Item {
-                width: navColumn.width
-                height: askGroupLabel.implicitHeight + Theme.titleGap
-
-                Text {
-                  id: askGroupLabel
-                  anchors.left: parent.left
-                  anchors.right: parent.right
-                  anchors.bottom: parent.bottom
-                  anchors.leftMargin: Theme.pad
-                  anchors.rightMargin: Theme.pad
-                  text: "Ask"
-                  color: Theme.muted
-                  font.family: Theme.fontFamily
-                  font.pixelSize: Theme.sectionSize
-                  font.bold: true
-                  elide: Text.ElideRight
-                }
-              }
-
-              Rectangle {
-                id: askRow
-                width: navColumn.width
-                height: Theme.rowHeight
-                radius: Theme.radius
-                activeFocusOnTab: true
-                readonly property bool hovered: askMouse.containsMouse
-                color: (askRow.hovered || askRow.activeFocus) ? Theme.fill(Theme.hoverFill) : "transparent"
-
-                Accessible.role: Accessible.Button
-                Accessible.name: "Ask"
-                Accessible.description: "Describe what you want to change in plain words"
-                Accessible.onPressAction: askBar.open()
-                Keys.onReturnPressed: askBar.open()
-                Keys.onSpacePressed: askBar.open()
-
-                PrefsIcon {
-                  id: askIcon
-                  anchors.left: parent.left
-                  anchors.leftMargin: Theme.pad
-                  anchors.verticalCenter: parent.verticalCenter
-                  name: "sparkling-2-line"
-                  size: Theme.navIconSize
-                  color: (askRow.hovered || askRow.activeFocus) ? Theme.foreground : Theme.muted
-                }
-
-                Text {
-                  anchors.left: askIcon.right
-                  anchors.right: askHint.left
-                  anchors.verticalCenter: parent.verticalCenter
-                  anchors.leftMargin: Theme.space
-                  anchors.rightMargin: Theme.space
-                  text: "Ask for anything"
-                  color: Theme.foreground
-                  font.family: Theme.fontFamily
-                  font.pixelSize: Theme.labelSize
-                  elide: Text.ElideRight
-                }
-
-                Text {
-                  id: askHint
-                  anchors.right: parent.right
-                  anchors.rightMargin: Theme.pad
-                  anchors.verticalCenter: parent.verticalCenter
-                  text: "^K"
-                  color: Theme.muted
-                  opacity: Theme.metaOpacity
-                  font.family: Theme.fontFamily
-                  font.pixelSize: Theme.captionSize
-                }
-
-                MouseArea {
-                  id: askMouse
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: askBar.open()
-                }
-              }
-
-              Item {
-                width: navColumn.width
-                height: Theme.sidebarGroupSpacing
-              }
-            }
-
             Repeater {
               model: root.groupedPages
               delegate: Column {
@@ -949,18 +879,39 @@ ShellRoot {
       }
     }
 
-    // Lab(askbar): plain-English entry point. Navigates, or hands the
-    // request to the agent for a plan. It has no path that writes a setting.
-    AskBar {
-      id: askBar
-      hubs: HubsJs.hubs()
-      onNavigate: function (hubId) {
-        root.currentPage = hubId
-        if (searchField.text.length > 0) searchField.text = ""
-        else root.loadHub(hubId)
+    // Lab: a second Atmos is refused, and told why.
+    //
+    // Silently quitting would look like a crash, and silently continuing
+    // would let two windows race over the same config files. Saying it and
+    // then closing is the only honest option.
+    Connections {
+      target: Omarchy
+      function onLabLostTheLockChanged() {
+        if (Omarchy.labLostTheLock) secondInstanceDialog.open()
       }
-      onAskAgent: function (prompt) {
-        Omarchy.askAgentFreeform(prompt)
+    }
+
+    PrefsDialog {
+      id: secondInstanceDialog
+      title: "Atmos is already open"
+      closePolicy: Popup.NoAutoClose
+
+      PrefsText {
+        width: parent.width
+        text: "Another Atmos is running on this machine. Two of them would write the same configuration files at the same time, and whichever finished second would quietly overwrite the other, so this one will close.\n\nSwitch to the window that is already open."
+        color: Theme.foreground
+        font.family: Theme.fontFamily
+        font.pixelSize: Theme.labelSize
+        wrapMode: Text.WordWrap
+      }
+
+      Row {
+        anchors.right: parent.right
+        PrefsButton {
+          text: "Close this one"
+          primary: true
+          onClicked: Qt.quit()
+        }
       }
     }
 
@@ -1104,12 +1055,17 @@ ShellRoot {
       onActivated: searchField.forceActiveFocus()
     }
 
-    // Lab(askbar): Ctrl+K is the command-palette key everywhere else, so it
-    // is the one people already try.
+    // Lab(askbar): Ctrl+K for people who expect it, but it only goes to the
+    // Ask page -- the same place the sidebar's first row goes. There is no
+    // second, hidden version of this feature.
     Shortcut {
       sequences: ["Ctrl+K"]
       enabled: Lab.on("askbar")
-      onActivated: askBar.open()
+      onActivated: {
+        root.currentPage = "ask"
+        if (searchField.text.length > 0) searchField.text = ""
+        else root.loadHub("ask")
+      }
     }
 
     // Lab(keyboard): the audience runs a tiling WM and lives on the keyboard.

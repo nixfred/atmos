@@ -143,6 +143,10 @@ function helpAccessibleName(title) {
 }
 
 var NAV_GROUP_LABELS = {
+  // Lab(askbar): Ask is its own section and it is first, because it is the
+  // page you want when you do not know which of the others you want. It has
+  // no heading on purpose: the section holds one row already called Ask, and
+  // a heading would just say Ask above Ask.
   look: "Desktop",
   input: "Controls",
   device: "Machine",

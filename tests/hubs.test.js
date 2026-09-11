@@ -145,9 +145,14 @@ const aliases = hubs.launcherSuffixes();
 });
 
 const nav = hubs.navPages();
-assertEqual(nav[0].id, "appearance", "navPages starts at appearance");
-assertEqual(nav[0].group, "look", "navPages uses navGroup as group");
-assert(nav[0].keywords.indexOf("wallpaper") !== -1, "navPages keywords include the union");
+// Lab(askbar): Ask is the first hub. It is the page you want when you do not
+// know which of the others you want, so it sits above them all.
+assertEqual(nav[0].id, "ask", "navPages starts at ask");
+assertEqual(nav[1].id, "appearance", "appearance follows ask");
+assertEqual(nav[0].group, "ask", "navPages uses navGroup as group");
+assertEqual(nav[1].group, "look", "appearance still groups under look");
+// Still the Appearance hub being checked here, now at index 1.
+assert(nav[1].keywords.indexOf("wallpaper") !== -1, "navPages keywords include the union");
 function consecutiveNavGroup(group) {
   const ids = nav
     .filter(function (page) {
@@ -178,7 +183,8 @@ assertEqual(
 );
 
 const search = hubs.searchHubs();
-assertEqual(search[0].description.indexOf("Theme") !== -1, true, "searchHubs keeps descriptions");
+// Index 1 is Appearance now that Ask leads the catalogue.
+assertEqual(search[1].description.indexOf("Theme") !== -1, true, "searchHubs keeps descriptions");
 assert(Array.isArray(search[0].keywords), "searchHubs keywords are an array");
 assert(
   hubs.hubById("input").keywords.indexOf("keyboard") !== -1,

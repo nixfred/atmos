@@ -30,6 +30,19 @@ function child(id, title, file) {
 
 function hubs() {
   return [
+    // Lab(askbar): first, deliberately. Everything below assumes you already
+    // know which page you want; this is the one for when you do not.
+    {
+      id: "ask",
+      title: "Ask",
+      description: "Describe what you want in plain words and Atmos will find the setting.",
+      navGroup: "ask",
+      snapshotGroup: "",
+      icon: "question-line",
+      file: "AskPage.qml",
+      keywords: keywordList("ask question help find search natural language plain words assistant"),
+      children: [],
+    },
     {
       id: "appearance",
       title: "Appearance",

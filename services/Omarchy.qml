@@ -2416,6 +2416,43 @@ QtObject {
   // Detection is a probe, not an assumption: a model being installed and a
   // server being up are different things, and the Ask bar must not offer a
   // button that will hang.
+  // Lab: one Atmos at a time, for real.
+  //
+  // Quickshell already refuses a second instance of the same config path,
+  // which is why this looks solved and is not: run it once from the install
+  // and once from a checkout and two Atmos windows open, both writing the
+  // same config files. Settings are shared mutable state on disk, so two
+  // writers race, and the loser's change is silently lost.
+  //
+  // The lock is on the app, not the path. flock holds an exclusive lock in
+  // the runtime directory for as long as the holder lives, so it cannot be
+  // left stale by a crash -- the kernel drops it when the process dies,
+  // which a lockfile containing a PID cannot promise.
+  property bool labLostTheLock: false
+
+  readonly property string labLockPath: {
+    var dir = Quickshell.env("XDG_RUNTIME_DIR")
+    if (!dir) dir = "/tmp"
+    return dir + "/atmos.lock"
+  }
+
+  property Process labLock: Process {
+    running: true
+    // -n is non-blocking: fail immediately rather than queue behind the
+    // instance that already owns it. tail -f /dev/null parks cheaply and
+    // dies with us, releasing the lock.
+    command: ["flock", "-n", root.labLockPath, "-c", "exec tail -f /dev/null"]
+    onExited: function (exitCode) {
+      // 1 is flock's "someone else holds it". Anything else means flock
+      // itself is missing or broken, and refusing to start over a missing
+      // utility would be worse than the race it prevents.
+      if (exitCode === 1) root.labLostTheLock = true
+    }
+  }
+
+  // Lab(askbar): the catalogue, exposed once so the Ask page can read it.
+  readonly property var labHubs: HubsJs.hubs()
+
   property bool labLocalUp: false
   property var labLocalModels: []
   property string labLocalModel: ""
@@ -2549,16 +2586,6 @@ QtObject {
         root.labLocalError = "could not read the local model's reply"
       }
     }
-  }
-
-  // Lab(askbar): hand a written request to the agent. Same mechanism as
-  // askAgentAboutError -- it opens the user's coding agent with a prompt and
-  // nothing else. Atmos does not read a reply back or act on one, so the
-  // agent cannot become a way for the app to change settings indirectly.
-  function askAgentFreeform(prompt) {
-    var text = String(prompt || "")
-    if (!text) return
-    runCommand(["bash", "-c", "omarchy agent prompt \"$1\" >/dev/null 2>&1 &", "agent-prompt", text])
   }
 
   function askAgentAboutError() {

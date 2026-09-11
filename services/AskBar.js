@@ -234,32 +234,6 @@ function resolve(hubs, query) {
   };
 }
 
-// What Atmos hands the agent when local matching cannot answer. Spelled out
-// as a request for a plan, never for an action, so the agent's own output is
-// something a person reads and approves rather than something that already
-// happened.
-// What a local model is asked. Deliberately narrow: name one page and say
-// what you would change, in two lines. A small model on a laptop GPU is good
-// at picking from a list and bad at open-ended prose, so the prompt is a
-// multiple-choice question rather than an invitation to write.
-//
-// It is still not allowed to act. The answer is read by a person; nothing
-// parses it into a command.
-function localPrompt(query, hubTitles) {
-  var q = String(query || "").replace(/^\s+|\s+$/g, "");
-  if (!q) return "";
-  var titles = Array.isArray(hubTitles) ? hubTitles.join(", ") : "";
-  return (
-    "These are the pages of a Linux desktop settings app:\n" +
-    titles +
-    "\n\nThe user wants: " +
-    q +
-    "\n\nAnswer in exactly two short lines and nothing else.\n" +
-    "Line 1: PAGE: <one page name from the list above>\n" +
-    "Line 2: WHAT: <one sentence on what to change there>\n"
-  );
-}
-
 // Pull the page name back out. A small model will sometimes wrap it in
 // prose no matter what the prompt said, so match the label if it is there
 // and fall back to scanning for any known page name.
@@ -309,4 +283,10 @@ function agentPrompt(query, hubTitles) {
     "so I can approve it myself.\n\n" +
     (titles ? "Atmos pages: " + titles + "\n" : "")
   );
+}
+
+// The page reads the catalogue through here so the QML side does not have to
+// import Hubs.js separately.
+function hubsFrom(list) {
+  return Array.isArray(list) ? list : [];
 }
