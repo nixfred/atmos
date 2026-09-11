@@ -7,6 +7,7 @@ import "AtmosUpdate.js" as AtmosUpdate
 import "Diagnostics.js" as DiagnosticsJs
 import "Hardware.js" as HardwareJs
 import "Hooks.js" as HooksJs
+import "History.js" as HistoryJs
 import "Hubs.js" as HubsJs
 import "HyprPrefs.js" as HyprPrefs
 import "HyprSunset.js" as HyprSunset
@@ -796,9 +797,79 @@ QtObject {
     return SnapshotGroups.normalizeGroup(g)
   }
 
+  // Lab(timemachine + previewmode): every mutation in Atmos passes through
+  // here, which makes this the one honest place to record from or to hold.
+  // Hooking each page instead would mean trusting every future control to
+  // remember, and the ones that forgot would be exactly the changes nobody
+  // thought about -- the ones you most want when something breaks.
+  property var labHistory: []
+  property var labPending: []
+
+  function labRecord(argv, opts) {
+    if (!Lab.on("timemachine")) return
+    var o = opts || {}
+    labHistory = HistoryJs.push(
+      labHistory,
+      HistoryJs.entry(argv, {
+        key: o.key || "",
+        file: HistoryJs.targetFile(argv, Quickshell.env("HOME")),
+        source: o.labSource || "you",
+        sudo: o.sudo === true
+      })
+    )
+  }
+
+  function labHold(argv, opts) {
+    var o = opts || {}
+    var item = HistoryJs.entry(argv, {
+      key: o.key || "",
+      file: HistoryJs.targetFile(argv, Quickshell.env("HOME")),
+      source: "preview",
+      sudo: o.sudo === true
+    })
+    // The rendered text is for reading; the argv and opts are what Apply
+    // actually replays. Keeping only the text would make Apply a no-op that
+    // looked like it worked, which is the worst way for this to fail.
+    item.argv = argv
+    item.opts = o
+    labPending = HistoryJs.push(labPending, item)
+  }
+
+  function labClearPending() {
+    labPending = []
+  }
+
+  // Run everything currently held, then clear. The only way a held command
+  // ever executes, so "preview" cannot silently become "apply later".
+  function labApplyPending() {
+    var held = labPending
+    labPending = []
+    for (var i = 0; i < held.length; i++) {
+      if (!held[i] || !held[i].argv) continue
+      var o = held[i].opts || {}
+      // Bypass the hold, or Apply would re-hold everything it just released
+      // and nothing would ever run.
+      var replay = {
+        key: o.key,
+        apply: o.apply,
+        refresh: o.refresh,
+        sudo: o.sudo,
+        labBypassPreview: true
+      }
+      runCommand(held[i].argv, replay)
+    }
+  }
+
   function runCommand(argv, opts) {
     if (!(argv instanceof Array) || argv.length === 0) return
     opts = opts || {}
+    // Preview mode stops the write and shows it instead. Held, not queued:
+    // nothing here can run later by itself.
+    if (Lab.on("previewmode") && Lab.previewMode === true && opts.labBypassPreview !== true) {
+      labHold(argv, opts)
+      return
+    }
+    labRecord(argv, opts)
     enqueueIo({
       kind: "mut",
       argv: argv,

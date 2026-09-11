@@ -10,7 +10,7 @@ Master switch: `ATMOS_LAB=0` reverts everything. `ATMOS_LAB_OFF=id,id` disables 
 |---|------|-----|-------|--------|
 | 6 | Chamfered shape language | `chamfer` | DONE — Fred disliked, kept for csfh to judge | `d645fb4` |
 | 1 | Live status glyphs in sidebar | `statusglyph` | DONE — verified on screen + all paths tested | `560d8ad` |
-| 8 | Live hover preview | `hoverpreview` | todo | — |
+| 8 | Live hover preview | `hoverpreview` | DONE — themes | `737bdb7` |
 | 3 | "Why is this set?" provenance | `provenance` | DONE — section-level | `164b2ac` |
 | 7 | Simple / Everything per page | `disclosure` | DONE | `ed756c7` |
 | 5 | Preview mode (diff before write) | `previewmode` | todo | — |

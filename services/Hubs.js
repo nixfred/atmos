@@ -359,6 +359,8 @@ function hubs() {
       children: [
         // Lab(machine): a dashboard rather than the Diagnostics report.
         child("system/machine", "Machine", "system/MachinePage.qml"),
+        // Lab(timemachine): what changed, and what is about to.
+        child("system/history", "History", "system/HistoryPage.qml"),
         child("system/environment", "Environment", "system/EnvironmentPage.qml"),
         child("system/kernel", "Kernel", "system/KernelPage.qml"),
         child("system/diagnostics", "Diagnostics", "system/DiagnosticsPage.qml"),

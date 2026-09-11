@@ -51,6 +51,11 @@ QtObject {
   // about other settings apps.
   property bool simpleMode: false
 
+  // Lab(previewmode): while this is on, a write is shown instead of made.
+  // Off by default and never persisted, because a settings app silently
+  // refusing to save across a restart would be indistinguishable from a bug.
+  property bool previewMode: false
+
   function on(id) {
     if (!root.enabled) return false
     var key = String(id || "").toLowerCase()
