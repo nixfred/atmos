@@ -53,6 +53,10 @@ QtObject {
   // font so it tracks density the way pad and gap already do.
   readonly property int chamfer: Math.max(5, Math.round(fontSize * 0.62))
   readonly property int chamferSm: Math.max(3, Math.round(fontSize * 0.36))
+  // Lab: sidebar status badges. A step above caption so the glyph reads at a
+  // glance from across the desk, which is the whole point of putting state in
+  // the nav rather than on the page.
+  readonly property int badgeSize: Math.max(12, fontSize + 1)
   // Status ink for the sidebar glyphs. Grayscale chrome stays grayscale;
   // only genuine state earns colour, and only these three.
   readonly property color ok: "#6f8f6f"

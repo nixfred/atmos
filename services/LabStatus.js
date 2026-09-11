@@ -46,6 +46,9 @@ function servicesBadge(state) {
 }
 
 function bluetoothBadge(state) {
+  // Unknown is not off. A snapshot that has not populated yet must stay
+  // silent rather than report a radio state nobody verified.
+  if (state.bluetooth === undefined || state.bluetooth === null) return null;
   if (state.bluetooth !== true) return badge("off", "info", "Bluetooth radio is off");
   var devices = arr(state.bluetoothDevices);
   var connected = 0;
@@ -77,7 +80,13 @@ function networkBadge(state) {
     var ssid = String(state.netSsid || "");
     return badge("●", "ok", ssid ? "Connected to " + ssid : "Connected");
   }
-  return badge("▲", "warn", "Disconnected");
+  // Only an explicit disconnected state earns a warning. An empty or unknown
+  // kind means the snapshot has not answered yet, and guessing "down" there
+  // turns a loading window into a false alarm.
+  if (kind === "disconnected" || kind === "none" || kind === "off") {
+    return badge("▲", "warn", "Disconnected");
+  }
+  return null;
 }
 
 function softwareBadge(state) {

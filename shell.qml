@@ -608,7 +608,7 @@ ShellRoot {
                         return Theme.muted
                       }
                       font.family: Theme.fontFamily
-                      font.pixelSize: Theme.captionSize
+                      font.pixelSize: Theme.badgeSize
                       Accessible.role: Accessible.StaticText
                       Accessible.name: badge ? badge.title : ""
                     }
