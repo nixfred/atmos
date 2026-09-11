@@ -848,6 +848,21 @@ ShellRoot {
       }
     }
 
+    // Lab(askbar): plain-English entry point. Navigates, or hands the
+    // request to the agent for a plan. It has no path that writes a setting.
+    AskBar {
+      id: askBar
+      hubs: HubsJs.hubs()
+      onNavigate: function (hubId) {
+        root.currentPage = hubId
+        if (searchField.text.length > 0) searchField.text = ""
+        else root.loadHub(hubId)
+      }
+      onAskAgent: function (prompt) {
+        Omarchy.askAgentFreeform(prompt)
+      }
+    }
+
     // Lab(keyboard): the shortcut sheet, opened with ?. A keyboard-first app
     // has to be able to teach its own keys without sending you to a README.
     PrefsDialog {
@@ -986,6 +1001,14 @@ ShellRoot {
     Shortcut {
       sequences: ["Ctrl+F", "/"]
       onActivated: searchField.forceActiveFocus()
+    }
+
+    // Lab(askbar): Ctrl+K is the command-palette key everywhere else, so it
+    // is the one people already try.
+    Shortcut {
+      sequences: ["Ctrl+K"]
+      enabled: Lab.on("askbar")
+      onActivated: askBar.open()
     }
 
     // Lab(keyboard): the audience runs a tiling WM and lives on the keyboard.

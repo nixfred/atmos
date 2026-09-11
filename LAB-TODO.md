@@ -12,12 +12,12 @@ Master switch: `ATMOS_LAB=0` reverts everything. `ATMOS_LAB_OFF=id,id` disables 
 | 1 | Live status glyphs in sidebar | `statusglyph` | DONE — verified on screen + all paths tested | `560d8ad` |
 | 8 | Live hover preview | `hoverpreview` | todo | — |
 | 3 | "Why is this set?" provenance | `provenance` | DONE — section-level | `164b2ac` |
-| 7 | Simple / Everything per page | `disclosure` | todo | — |
+| 7 | Simple / Everything per page | `disclosure` | DONE | `ed756c7` |
 | 5 | Preview mode (diff before write) | `previewmode` | todo | — |
 | 4 | Time machine (change history) | `timemachine` | todo | — |
 | 10 | Keyboard-first navigation | `keyboard` | DONE | `a765d44` |
 | 9 | Machine page | `machine` | todo | — |
-| 2 | Ask bar (agent proposes, never writes) | `askbar` | todo | — |
+| 2 | Ask bar (agent proposes, never writes) | `askbar` | DONE | `23e38f1` |
 
 ## Then
 

@@ -2334,6 +2334,16 @@ QtObject {
     lastError = ""
   }
 
+  // Lab(askbar): hand a written request to the agent. Same mechanism as
+  // askAgentAboutError -- it opens the user's coding agent with a prompt and
+  // nothing else. Atmos does not read a reply back or act on one, so the
+  // agent cannot become a way for the app to change settings indirectly.
+  function askAgentFreeform(prompt) {
+    var text = String(prompt || "")
+    if (!text) return
+    runCommand(["bash", "-c", "omarchy agent prompt \"$1\" >/dev/null 2>&1 &", "agent-prompt", text])
+  }
+
   function askAgentAboutError() {
     var prompt = RichUi.agentErrorPrompt(lastError)
     if (!prompt) return
