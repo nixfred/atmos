@@ -10,6 +10,7 @@ import "Hooks.js" as HooksJs
 import "History.js" as HistoryJs
 import "CardArt.js" as CardArtJs
 import "CardLayout.js" as CardLayoutJs
+import "CardScene.js" as CardSceneJs
 import "MachineCard.js" as MachineCardJs
 import "Hubs.js" as HubsJs
 import "HyprPrefs.js" as HyprPrefs
@@ -2553,6 +2554,62 @@ QtObject {
 
   // The agent is handed the real specs, the real theme and the real canvas
   // size, then asked to design rather than to fill in a form.
+  // Lab(machinecard): ask the user's own agent to draw the scene.
+  //
+  // Which agent is not Atmos's choice. Omarchy already holds a configured
+  // default and agent-ask.sh maps it onto its non-interactive mode, so this
+  // is the same code path for claude, codex, grok or gemini and needs no
+  // credential Atmos has to know about.
+  property string labSceneSvg: ""
+  property var labSceneDropped: []
+  property string labSceneWish: ""
+  property string labSceneStage: ""
+
+  readonly property string labAgentName: root.labCardFacts.agent || "your agent"
+
+  function labMakeScene(wish, w, h) {
+    var text = String(wish || "")
+    if (!text || root.labAgentBusy) return
+    root.labSceneWish = text
+    root.labSceneStage = "Asking " + root.labAgentName + " to draw the scene"
+    root.labAskAgent(
+      CardSceneJs.scenePrompt({
+        wish: text,
+        card: root.labCard,
+        width: w,
+        height: h,
+        theme: {
+          background: String(Theme.background),
+          foreground: String(Theme.foreground),
+          accent: String(Theme.accent),
+          muted: String(Theme.muted)
+        }
+      })
+    )
+  }
+
+  // Everything an agent returns is untrusted markup. Sanitise, then check
+  // that a picture was actually drawn -- a syntactically valid but empty
+  // <svg/> must read as a failure, not as a black card.
+  function labApplyScene(reply) {
+    var clean = CardSceneJs.sanitize(reply)
+    var stats = CardSceneJs.sceneStats(clean.svg)
+    root.labSceneDropped = clean.dropped
+    root.labSceneStage = ""
+    if (!stats.usable) {
+      root.labSceneSvg = ""
+      root.labCardStatus = clean.svg.length === 0
+        ? "Your agent replied without a drawing. Try describing it differently."
+        : "Your agent's drawing came back nearly empty. Try again, or describe it differently."
+      return
+    }
+    root.labSceneSvg = clean.svg
+    root.labCardStatus = "Drawn by " + root.labAgentName + ": " + stats.shapes + " shapes."
+    if (clean.dropped.length > 0) {
+      root.labCardStatus += " Removed " + clean.dropped.join(", ") + " for safety."
+    }
+  }
+
   function labDesignPrompt(wish, w, h) {
     return CardLayoutJs.designPrompt({
       wish: wish,

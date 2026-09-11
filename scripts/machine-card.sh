@@ -71,5 +71,7 @@ printf '"shell":%s,' "$(basename "${SHELL:-}" | json_escape)"
 printf '"uptime":%s,' "$(uptime -p 2>/dev/null | sed 's/^up //' | json_escape)"
 printf '"theme":%s,' "$(theme_name | json_escape)"
 printf '"storageTotal":%s,' "$(storage_total)"
-printf '"vms":%s' "$(vm_count)"
+printf '"vms":%s,' "$(vm_count)"
+# Named so the UI can say "Asking codex…" rather than "asking the agent".
+printf '"agent":%s' "$(command -v omarchy-default-agent >/dev/null 2>&1 && omarchy-default-agent 2>/dev/null | json_escape || echo '""')"
 printf '}\n'

@@ -23,6 +23,11 @@ Item {
 
   property var card: ({ title: "", tagline: "", rows: [] })
   property var layout: CardLayoutJs.defaultLayout()
+  // The scene the agent drew. When present it replaces the procedural art
+  // entirely -- a real illustration beats a texture every time, and the
+  // motif engine stays only as the instant fallback before the agent answers
+  // or when it cannot.
+  property string sceneSvg: ""
   property string logoPath: "/usr/share/omarchy/logo.svg"
 
   implicitWidth: 1920
@@ -50,14 +55,31 @@ Item {
     color: root.roleColor(root.layout ? root.layout.background : "background")
   }
 
-  // Art. One canvas over the whole card; the region the design asked for is
-  // baked into the shape coordinates by CardArt.plan.
+  // The agent's illustration, drawn edge to edge. Handed to Image as a data
+  // URI so nothing touches the filesystem and there is no temp file to leak
+  // or clean up.
+  Image {
+    anchors.fill: parent
+    visible: root.sceneSvg.length > 0
+    source: root.sceneSvg.length > 0
+      ? "data:image/svg+xml;utf8," + encodeURIComponent(root.sceneSvg)
+      : ""
+    fillMode: Image.PreserveAspectCrop
+    smooth: true
+    // sourceSize pins the rasterisation to the real output size. Without it
+    // an SVG scaled up on export comes out soft.
+    sourceSize.width: root.width
+    sourceSize.height: root.height
+    asynchronous: false
+  }
+
+  // Procedural art. Only when the agent has not drawn anything.
   Canvas {
     id: art
     anchors.fill: parent
     renderStrategy: Canvas.Immediate
     renderTarget: Canvas.Image
-    visible: root.layout.art.motif !== "none"
+    visible: root.sceneSvg.length === 0 && root.layout.art.motif !== "none"
 
     readonly property color ink: root.roleColor(root.layout.art.color)
     readonly property var spec: root.layout.art

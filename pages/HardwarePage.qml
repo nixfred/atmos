@@ -84,7 +84,7 @@ PrefsPage {
     function onLabAgentAnswerChanged() {
       if (Omarchy.labAgentAnswer.length === 0 || !root.awaitingDesign) return
       root.awaitingDesign = false
-      Omarchy.labApplyDesign(Omarchy.labAgentAnswer, root.wish)
+      Omarchy.labApplyScene(Omarchy.labAgentAnswer)
     }
   }
 
@@ -113,45 +113,80 @@ PrefsPage {
           onSubmitted: function (value) { root.makeCard(value) }
         }
 
-        Row {
-          spacing: Theme.space
+        PrefsButton {
+          text: Omarchy.labAgentBusy ? "Drawing…" : "Make it"
+          primary: true
+          enabled: !Omarchy.labAgentBusy && root.wish.length > 0
+          onClicked: root.makeCard(root.wish)
+        }
 
-          PrefsButton {
-            text: Omarchy.labAgentBusy ? "Designing…" : "Make it"
-            primary: true
-            enabled: !Omarchy.labAgentBusy
-            onClicked: root.makeCard(root.wish)
-          }
+        // Waiting has to be unmissable. Drawing a scene takes a coding agent
+        // tens of seconds, which is long enough that a thin bar reads as a
+        // frozen window -- the first version of this looked broken to Fred
+        // and he was right. A framed panel, the agent by name, a live clock
+        // and a moving bar, so there is no question it is working.
+        Rectangle {
+          width: parent.width
+          visible: Omarchy.labAgentBusy
+          implicitHeight: waitCol.implicitHeight + Theme.spaceMd * 2
+          height: implicitHeight
+          color: Theme.accentFill(0.10)
+          border.width: Theme.borderWidth
+          border.color: Theme.accent
 
-          PrefsText {
-            anchors.verticalCenter: parent.verticalCenter
-            text: {
-              if (Omarchy.labAgentBusy)
-                return "Your agent is designing it. " + Omarchy.labAgentSeconds + "s so far, usually under twenty."
-              if (Omarchy.labAgentError.length > 0)
-                return "Agent: " + Omarchy.labAgentError
-              if (Omarchy.labCardBusy) return "Reading the machine…"
-              return ""
+          Column {
+            id: waitCol
+            x: Theme.spaceMd
+            y: Theme.spaceMd
+            width: parent.width - Theme.spaceMd * 2
+            spacing: Theme.space
+
+            PrefsText {
+              width: parent.width
+              text: Omarchy.labSceneStage.length > 0
+                ? Omarchy.labSceneStage + "…"
+                : "Working…"
+              color: Theme.foreground
+              font.family: Theme.fontFamily
+              font.pixelSize: Theme.labelSize
+              font.bold: true
             }
-            color: Omarchy.labAgentError.length > 0 ? Theme.urgent : Theme.muted
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.captionSize
+
+            PrefsText {
+              width: parent.width
+              text: Omarchy.labAgentSeconds + "s elapsed. Drawing a whole scene usually takes 30 to 90 seconds. Leave this page open."
+              color: Theme.muted
+              font.family: Theme.fontFamily
+              font.pixelSize: Theme.captionSize
+              wrapMode: Text.WordWrap
+            }
+
+            // No percentage: an agent reports none, and a bar with a number
+            // on it would be a lie. This says alive; the clock says how long.
+            PrefsProgress {
+              width: parent.width
+              indeterminate: true
+            }
           }
         }
 
-        // No percentage, because an agent reports none. A bar with a number
-        // on it would be a lie; this says "alive" and the label says how long.
-        PrefsProgress {
+        PrefsText {
           width: parent.width
-          visible: Omarchy.labAgentBusy
-          indeterminate: true
+          visible: !Omarchy.labAgentBusy && Omarchy.labAgentError.length > 0
+          text: "Your agent could not answer: " + Omarchy.labAgentError
+          color: Theme.urgent
+          font.family: Theme.fontFamily
+          font.pixelSize: Theme.captionSize
+          wrapMode: Text.WordWrap
         }
       }
     }
 
     PrefsRow {
       label: "Your card"
-      description: Omarchy.labCard.rows.length + " facts · " + root.cardW + "x" + root.cardH + " · " + Omarchy.labCardLayout.art.motif
+      description: Omarchy.labSceneSvg.length > 0
+        ? Omarchy.labCard.rows.length + " facts · " + root.cardW + "x" + root.cardH + " · drawn by " + Omarchy.labAgentName
+        : Omarchy.labCard.rows.length + " facts · " + root.cardW + "x" + root.cardH + " · describe a scene and press Make it"
       query: root.query
       stretchControl: true
 
@@ -168,6 +203,7 @@ PrefsPage {
           height: root.cardH
           card: Omarchy.labCard
           layout: Omarchy.labCardLayout
+          sceneSvg: Omarchy.labSceneSvg
           transform: Scale { xScale: parent.fit; yScale: parent.fit }
         }
       }
@@ -211,7 +247,7 @@ PrefsPage {
     root.wish = String(value || "")
     if (root.wish.length === 0) return
     root.awaitingDesign = true
-    Omarchy.labAskAgent(Omarchy.labDesignPrompt(root.wish, root.cardW, root.cardH))
+    Omarchy.labMakeScene(root.wish, root.cardW, root.cardH)
   }
 
   // grabToImage lives here because only this page holds the live Item. Atmos
