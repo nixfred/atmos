@@ -112,6 +112,16 @@ function disksBadge(state) {
 
 function forHub(id, state) {
   var s = state || {};
+  // Nothing is knowable until the snapshot has answered once.
+  //
+  // Guarding on undefined was not enough, and this is the second time this
+  // bug has been fixed. The singleton's declared defaults are themselves
+  // alarming values -- netKind starts at "disconnected" and bluetooth starts
+  // at false -- so a freshly launched window reported the network down and
+  // the radio off on a machine where neither was true, every single launch.
+  // "Unknown" has to be asked about explicitly, because the resting state of
+  // the data is indistinguishable from bad news.
+  if (s.ready !== true) return null;
   switch (String(id || "")) {
     case "services":
       return servicesBadge(s);

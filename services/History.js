@@ -19,12 +19,21 @@ var MAX_ENTRIES = 200;
 function unwrap(argv) {
   var list = Array.isArray(argv) ? argv.slice() : [];
   if (list.length >= 3 && list[0] === "bash" && list[1] === "-c") {
-    // bash -c SCRIPT NAME ARGS... -- the interesting part is ARGS when the
-    // script is one of Atmos's own detach or path wrappers.
+    // bash -c SCRIPT NAME ARGS... The interesting part is ARGS, but only
+    // when the script really is one of Atmos's own wrappers.
     var script = String(list[2] || "");
-    var rest = list.slice(4);
-    if (rest.length > 0 && /exec|"\$@"/.test(script)) return rest;
-    return list.slice(2);
+    // Match the wrapper shape, not the word. A plain substring test for
+    // "exec" fires on any script that merely contains it -- "echo execute
+    // me" was enough -- and then the command is rendered as whatever
+    // happened to be in that argument slot.
+    var isWrapper = /exec\s+"\$@"|exec\s+"\$1"|"\$@"\s*>/.test(script);
+    if (!isWrapper) return list.slice(2);
+    // A wrapper that shifts has consumed $1, so the real command starts one
+    // later. Without this the stub directory that shift exists to remove is
+    // exactly what gets displayed.
+    var start = /(^|;|\s)shift(\s|;|$)/.test(script) ? 5 : 4;
+    var rest = list.slice(start);
+    return rest.length > 0 ? rest : list.slice(2);
   }
   return list;
 }
@@ -46,10 +55,15 @@ function describe(argv) {
 function targetFile(argv, home) {
   var text = describe(argv);
   var h = String(home || "");
-  var m = text.match(/(~|\/home\/[^\s"]+)?\/[^\s"]*\.(lua|toml|json|conf|sh)/);
+  // The extension has to end the path. Unanchored, ".conf" matched inside
+  // "~/.config/hypr" and reported the file as "~/.conf", and ".json" ate the
+  // c off a .jsonc file.
+  var m = text.match(/(~|\/home\/[^\s"]+)?\/[^\s"]*\.(lua|toml|json|conf|sh)(?![A-Za-z0-9])/);
   if (!m) return "";
   var path = m[0];
-  if (h && path.indexOf(h) === 0) return "~" + path.slice(h.length);
+  // Boundary, not prefix. "/home/pi" is a prefix of "/home/pieter", so a
+  // plain prefix test rewrote another user's path into "~eter/...".
+  if (h && (path === h || path.indexOf(h + "/") === 0)) return "~" + path.slice(h.length);
   return path;
 }
 
@@ -76,9 +90,12 @@ function push(list, item) {
 }
 
 function relativeTime(at, now) {
+  // Number(null) and Number("") are both 0, and 0 is finite, so an isFinite
+  // guard alone reported a missing timestamp as 1970 -- "20707d ago".
+  if (at === null || at === undefined || at === "") return "";
   var then = Number(at);
   var ref = typeof now === "number" ? now : Date.now();
-  if (!isFinite(then)) return "";
+  if (!isFinite(then) || then <= 0) return "";
   var secs = Math.max(0, Math.round((ref - then) / 1000));
   if (secs < 10) return "just now";
   if (secs < 60) return secs + "s ago";

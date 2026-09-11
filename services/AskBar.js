@@ -14,11 +14,18 @@
 // fallback for the requests local matching cannot honestly answer.
 
 function norm(text) {
-  return String(text || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9 ]+/g, " ")
-    .replace(/\s+/g, " ")
-    .replace(/^ | $/g, "");
+  return (
+    String(text || "")
+      .toLowerCase()
+      // Join across an internal hyphen or apostrophe before splitting on
+      // anything else. Splitting them turns "wi-fi" into "wi" and "fi", two
+      // fragments that match nothing, so searching the single most obvious
+      // word a person could type found everything except Network.
+      .replace(/([a-z0-9])[-'’]([a-z0-9])/g, "$1$2")
+      .replace(/[^a-z0-9 ]+/g, " ")
+      .replace(/\s+/g, " ")
+      .replace(/^ | $/g, "")
+  );
 }
 
 // Filler that appears in half of all plain-English requests and belongs to
@@ -88,9 +95,11 @@ function words(text) {
   for (var i = 0; i < raw.length; i++) {
     if (raw[i] && !marked(STOP, raw[i])) out.push(raw[i]);
   }
-  // If the request was nothing but filler, fall back to the raw words rather
-  // than answering "no match" to a question that did have words in it.
-  return out.length > 0 ? out : raw;
+  // A request made entirely of filler carries no intent, so it gets no
+  // answer. Falling back to the raw tokens here undid the whole point of the
+  // stop list: "on" came back as Notifications and Applications, which is
+  // precisely the substring confusion the list exists to prevent.
+  return out;
 }
 
 // Intent words that mean "change it", not "show me". Used only to phrase the

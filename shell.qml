@@ -31,6 +31,9 @@ ShellRoot {
   // Lab(statusglyph): the only state the sidebar badges read. Bound once
   // here so a change re-evaluates this object and nothing else.
   readonly property var labState: ({
+    // The gate. Omarchy's declared defaults are alarming values, so a badge
+    // must not speak until the snapshot has actually answered once.
+    ready: Omarchy.snapshotReady,
     systemdUnits: Omarchy.systemdUnits,
     bluetooth: Omarchy.bluetooth,
     bluetoothDevices: Omarchy.bluetoothDevices,
