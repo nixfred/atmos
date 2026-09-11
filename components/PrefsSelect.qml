@@ -25,6 +25,17 @@ Item {
   // one that does not is unaffected, because nothing here acts on its own.
   signal previewed(string value)
 
+  // Last value handed out, so a repeat of the same option does not re-apply
+  // the theme on every mouse move across one row.
+  property string labHovered: ""
+
+  function labHoverOption(value) {
+    var next = String(value || "")
+    if (next === root.labHovered) return
+    root.labHovered = next
+    root.previewed(next)
+  }
+
   implicitWidth: Theme.controlColumnWidth
   implicitHeight: Theme.controlHeight
   width: implicitWidth
@@ -87,6 +98,7 @@ Item {
     changed(next)
     if (value === next) _holding = false
     refreshDisplayLabel()
+    if (Lab.on("hoverpreview")) root.labHoverOption("")
     popup.close()
   }
 
@@ -201,7 +213,13 @@ Item {
       else list.forceActiveFocus()
       Qt.callLater(root.placePopup)
     }
-    onClosed: root.filter = ""
+    onClosed: {
+      root.filter = ""
+      // Closing by any route -- Escape, click-away, picking a value -- puts
+      // the real theme back. Without this, dismissing the popup while a row
+      // is hovered would leave you looking at a preview you never chose.
+      if (Lab.on("hoverpreview")) root.labHoverOption("")
+    }
 
     background: Rectangle {
       color: Theme.background
@@ -248,6 +266,13 @@ Item {
             verticalAlignment: Text.AlignVCenter
           }
         }
+      }
+
+      // Lab(hoverpreview): one place that reverts, so there is no race
+      // between a row losing the pointer and its neighbour gaining it.
+      HoverHandler {
+        id: listHover
+        onHoveredChanged: if (Lab.on("hoverpreview") && !hovered) root.labHoverOption("")
       }
 
       ListView {
@@ -313,8 +338,12 @@ Item {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: root.pickValue(root.optionValue(modelData))
-            onEntered: if (Lab.on("hoverpreview")) root.previewed(root.optionValue(modelData))
-            onExited: if (Lab.on("hoverpreview")) root.previewed("")
+            // Enter only. The matching revert is on the list and on the
+            // popup, never on the row -- moving between two adjacent rows
+            // can fire the old row's onExited after the new row's
+            // onEntered, which undoes the preview the instant it is set and
+            // makes the whole feature look like it does nothing.
+            onEntered: if (Lab.on("hoverpreview")) root.labHoverOption(root.optionValue(modelData))
           }
         }
 

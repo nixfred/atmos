@@ -158,28 +158,4 @@ PrefsPage {
       }
     }
   }
-
-  PrefsGroup {
-    title: "What Ask may do"
-    query: root.query
-    detail: "Stated plainly, because a settings panel that can talk to a model should say exactly how far that goes."
-
-    PrefsRow {
-      label: "It can point"
-      description: "Take you to a page, and show you what a local model thinks. That is the whole of it."
-      query: root.query
-    }
-
-    PrefsRow {
-      label: "It cannot change anything"
-      description: "No answer here is turned into a command. There is no code path from this page to a writer, which is why it is safe to leave switched on."
-      query: root.query
-    }
-
-    PrefsRow {
-      label: "It stays in Atmos"
-      description: "No terminal opens, nothing is handed to another program, and the question does not leave this computer."
-      query: root.query
-    }
-  }
 }
