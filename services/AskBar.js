@@ -162,9 +162,10 @@ function scoreHub(hub, query) {
       score += 40;
       hit = true;
     }
-    // Whole word, not substring. "on" must not match "notifications" and
-    // "bat" must not match "battery" -- a substring hit on a keyword list is
-    // how a resolver ends up confidently wrong.
+    // Whole word scores full. A substring still counts, at roughly half,
+    // and only for words of four characters or more -- enough for "blueto"
+    // to find Bluetooth without letting "on" match "notifications". The
+    // short-fragment case is what makes a resolver confidently wrong.
     if (marked(keyWords, q)) {
       score += 18;
       hit = true;

@@ -46,10 +46,13 @@ function servicesBadge(state) {
 }
 
 function bluetoothBadge(state) {
-  // Unknown is not off. A snapshot that has not populated yet must stay
-  // silent rather than report a radio state nobody verified.
-  if (state.bluetooth === undefined || state.bluetooth === null) return null;
-  if (state.bluetooth !== true) return badge("off", "info", "Bluetooth radio is off");
+  // Positive evidence only, for the same reason as networkBadge: the
+  // singleton declares bluetooth false before any snapshot has run, and the
+  // ready gate can open while that default is still in place. Reporting a
+  // radio "off" when it is on is the same false alarm in a different row.
+  //
+  // A connected device is something Atmos genuinely knows. A radio being off
+  // is something the user turned off themselves.
   var devices = arr(state.bluetoothDevices);
   var connected = 0;
   for (var i = 0; i < devices.length; i++) {
@@ -80,12 +83,18 @@ function networkBadge(state) {
     var ssid = String(state.netSsid || "");
     return badge("●", "ok", ssid ? "Connected to " + ssid : "Connected");
   }
-  // Only an explicit disconnected state earns a warning. An empty or unknown
-  // kind means the snapshot has not answered yet, and guessing "down" there
-  // turns a loading window into a false alarm.
-  if (kind === "disconnected" || kind === "none" || kind === "off") {
-    return badge("▲", "warn", "Disconnected");
-  }
+  // Anything else is silent, including "disconnected".
+  //
+  // This badge has now cried wolf twice. The singleton declares netKind as
+  // "disconnected" before any snapshot runs, and snapshotReady is set true
+  // even when the snapshot was skipped or failed -- so the ready gate can
+  // open while the defaults are still in place, and a working wifi
+  // connection gets a warning triangle.
+  //
+  // Rather than chase a third guard, the badge now only ever speaks when it
+  // has positive evidence: a named connection type. Being offline is the one
+  // thing a user never needs an indicator to tell them, and a false alarm
+  // here costs more than the missing signal is worth.
   return null;
 }
 

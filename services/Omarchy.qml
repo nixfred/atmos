@@ -2510,7 +2510,15 @@ QtObject {
   }
 
   property Process labLock: Process {
-    running: true
+    // Gated, so ATMOS_LAB=0 really does mean identical to main. Without this
+    // the switch still left a flock holder running, and "off changes nothing"
+    // would have been a claim the code did not honour.
+    //
+    // This one is arguably a plain bug fix rather than a feature -- two Atmos
+    // instances racing over the same config files is not desirable on any
+    // branch -- but that is the maintainer's call, not something to smuggle
+    // in behind a switch that promises to change nothing.
+    running: Lab.enabled
     // -n is non-blocking: fail immediately rather than queue behind the
     // instance that already owns it. tail -f /dev/null parks cheaply and
     // dies with us, releasing the lock.

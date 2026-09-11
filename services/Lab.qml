@@ -31,12 +31,16 @@ QtObject {
     return true
   }
 
+  // Keys are prefixed. A bare object is not a set: disabledIds["constructor"]
+  // and ["toString"] are truthy through the prototype, so ATMOS_LAB_OFF with
+  // either word would have disabled nothing while appearing to work. Same
+  // hazard as the one already fixed in AskBar.js and History.js.
   readonly property var disabledIds: {
     var out = {}
     var parts = String(root.envOff || "").split(",")
     for (var i = 0; i < parts.length; i++) {
       var p = parts[i].replace(/^\s+|\s+$/g, "").toLowerCase()
-      if (p) out[p] = true
+      if (p) out["f_" + p] = true
     }
     return out
   }
@@ -59,15 +63,15 @@ QtObject {
   function on(id) {
     if (!root.enabled) return false
     var key = String(id || "").toLowerCase()
-    if (root.overrides.hasOwnProperty(key)) return root.overrides[key] === true
-    return !root.disabledIds[key]
+    if (root.overrides["o_" + key] !== undefined) return root.overrides["o_" + key] === true
+    return root.disabledIds["f_" + key] !== true
   }
 
   function setOverride(id, value) {
     var key = String(id || "").toLowerCase()
     var next = {}
     for (var k in root.overrides) next[k] = root.overrides[k]
-    next[key] = value === true
+    next["o_" + key] = value === true
     root.overrides = next
   }
 
