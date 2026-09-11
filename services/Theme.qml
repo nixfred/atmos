@@ -47,6 +47,17 @@ QtObject {
   readonly property string iconChevronRight: "arrow-right-s-line"
   readonly property string iconInfo: "information-line"
   readonly property int radius: 0
+
+  // Lab: the chamfer. A cut corner, not a radius -- the visual language note
+  // above forbids rounding cards and this does not round them. Sized off the
+  // font so it tracks density the way pad and gap already do.
+  readonly property int chamfer: Math.max(5, Math.round(fontSize * 0.62))
+  readonly property int chamferSm: Math.max(3, Math.round(fontSize * 0.36))
+  // Status ink for the sidebar glyphs. Grayscale chrome stays grayscale;
+  // only genuine state earns colour, and only these three.
+  readonly property color ok: "#6f8f6f"
+  readonly property color warn: "#b5904f"
+  readonly property color info: muted
   readonly property real normalFill: ThemeJs.numberToken(root.shellValues, "controls.normal-fill-alpha", 0.04)
   readonly property real hoverFill: ThemeJs.numberToken(root.shellValues, "controls.hover-cursor-fill-alpha", 0.08)
   readonly property real selectedFill: ThemeJs.numberToken(root.shellValues, "controls.selected-fill-alpha", 0.18)

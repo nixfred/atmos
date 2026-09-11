@@ -25,16 +25,34 @@ Rectangle {
   radius: Theme.radius
   opacity: Theme.controlOpacity(enabled)
   activeFocusOnTab: enabled
-  color: {
+
+  // Lab(chamfer) repaints the button as a cut-cornered panel. The root stays
+  // a Rectangle so every existing anchor, size and caller keeps working; it
+  // just stops painting itself and lets Chamfer draw the same fill and the
+  // same hairline in a different silhouette.
+  readonly property bool chamfered: Lab.on("chamfer")
+  readonly property color bodyColor: {
     if ((mouse.containsMouse || root.activeFocus) && enabled) return Theme.fill(Theme.hoverFill)
     if (primary) return Theme.accentFill(Theme.primaryFill)
     return Theme.fill(Theme.normalFill)
   }
-  border.width: Theme.borderWidth
-  border.color: {
+  readonly property color edgeColor: {
     if (danger) return Theme.urgent
     if (primary || ((mouse.containsMouse || root.activeFocus) && enabled)) return Theme.accent
     return Theme.borderColor()
+  }
+
+  color: root.chamfered ? "transparent" : root.bodyColor
+  border.width: root.chamfered ? 0 : Theme.borderWidth
+  border.color: root.chamfered ? "transparent" : root.edgeColor
+
+  Chamfer {
+    anchors.fill: parent
+    visible: root.chamfered
+    z: -1
+    fillColor: root.bodyColor
+    strokeColor: root.edgeColor
+    cut: Theme.chamferSm
   }
 
   Keys.onReturnPressed: if (enabled) root.clicked()

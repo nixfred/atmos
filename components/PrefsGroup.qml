@@ -106,7 +106,7 @@ Column {
 
     Rectangle {
       id: card
-      visible: root.framed
+      visible: root.framed && !Lab.on("chamfer")
       width: parent.width
       implicitHeight: rowsWrap.implicitHeight
       height: implicitHeight
@@ -114,6 +114,17 @@ Column {
       border.width: Theme.borderWidth
       border.color: Theme.borderColor()
       radius: Theme.radius
+    }
+
+    // Lab(chamfer): same card, corners cut instead of square. Same fill,
+    // same hairline, same height -- only the silhouette changes.
+    Chamfer {
+      visible: root.framed && Lab.on("chamfer")
+      width: parent.width
+      height: card.implicitHeight
+      fillColor: Theme.fill(Theme.normalFill)
+      strokeColor: Theme.borderColor()
+      cut: Theme.chamfer
     }
 
     Item {
