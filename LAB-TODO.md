@@ -21,8 +21,8 @@ Master switch: `ATMOS_LAB=0` reverts everything. `ATMOS_LAB_OFF=id,id` disables 
 
 ## Then
 
-- [ ] Lab page listing all ten with runtime toggles
-- [ ] Full `./tests/run` green (needs PR #26's HOME sandbox fix to complete on this box)
+- [x] Lab page listing all features with runtime toggles
+- [x] Full `./tests/run` green — 3680 ok, 0 failures
 - [ ] Screenshots of each feature
 - [ ] Write the Issue for csfh/atmos, plain language, no jargon
 - [ ] Push branch to fork, post Issue, give Fred the group-chat text
