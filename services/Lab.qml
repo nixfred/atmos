@@ -141,6 +141,13 @@ QtObject {
       touches: "pages/system/MachinePage.qml"
     },
     {
+      id: "sectionfocus",
+      n: 11,
+      title: "Light the whole row",
+      blurb: "Hover or keyboard-focus a setting and the entire row lights, label and description and control together, with a hard edge on the left. Answers \"where am I\" without hunting for a focus ring.",
+      touches: "components/SettingRow.qml"
+    },
+    {
       id: "askbar",
       n: 2,
       title: "Ask bar",

@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import "../services"
 import "../services/ShellConfig.js" as ShellConfigJs
 
@@ -55,6 +56,26 @@ Item {
   readonly property bool shown: available && matches && !labFolded
 
   readonly property bool hovered: rowHover.hovered
+
+  // Lit when the pointer is over the row, or when anything inside it holds
+  // the keyboard.
+  //
+  // root.activeFocus is not enough on its own. A plain Item reports
+  // activeFocus only for itself, and focus actually lands on the control
+  // inside the row -- so a Tab into the field would light nothing. Walk up
+  // from the window's focus item instead and ask whether it is one of ours.
+  readonly property var labFocusItem: root.Window.activeFocusItem
+  readonly property bool labLit: {
+    if (root.hovered) return true
+    var item = root.labFocusItem
+    var guard = 0
+    while (item && guard < 40) {
+      if (item === root) return true
+      item = item.parent
+      guard += 1
+    }
+    return false
+  }
 
   HoverHandler {
     id: rowHover
@@ -117,6 +138,40 @@ Item {
   implicitWidth: width
   implicitHeight: visible ? body.implicitHeight + Theme.rowPad * 2 : 0
   height: implicitHeight
+
+  // Lab(sectionfocus): light the whole row, not a control inside it.
+  //
+  // A settings page is a wall of near-identical rows, and the moment you are
+  // navigating by keyboard the question "where am I" has to be answerable
+  // without hunting for a thin focus ring. Banding the entire row -- label,
+  // description and control together -- answers it at a glance, and it also
+  // makes the row read as one thing rather than three that happen to be
+  // near each other.
+  //
+  // Full-bleed behind the content and behind the splitter, so it reads as
+  // the row being lit rather than as a box drawn on top of it.
+  Rectangle {
+    anchors.fill: parent
+    z: -2
+    visible: Lab.on("sectionfocus") && root.labLit
+    color: Theme.fill(Theme.selectedFill * 0.55)
+
+    Behavior on opacity {
+      NumberAnimation { duration: Theme.motionFast }
+    }
+  }
+
+  // The left edge marker. The band alone is easy to miss on a bright theme
+  // where the fill is subtle; a hard edge is not.
+  Rectangle {
+    anchors.left: parent.left
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    width: Theme.railWidth
+    z: -1
+    visible: Lab.on("sectionfocus") && root.labLit
+    color: Theme.accent
+  }
 
   Rectangle {
     width: parent.width
