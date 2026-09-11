@@ -3,6 +3,8 @@ import "../components"
 import "../services"
 import "../services/Hardware.js" as HardwareJs
 import "../services/RichUi.js" as RichUi
+import "../services/CardArt.js" as CardArtJs
+import "../services/MachineCard.js" as MachineCardJs
 
 PrefsPage {
   id: root
@@ -22,6 +24,7 @@ PrefsPage {
   }
 
   Component.onCompleted: {
+    if (Lab.on("machinecard")) Omarchy.labLoadCard()
     hybridGpuConfirm.parent = root.prefsOverlay
   }
 
@@ -57,6 +60,173 @@ PrefsPage {
 
   function copyField(text) {
     Omarchy.copyText(String(text || ""))
+  }
+
+  // Lab(machinecard): the Atmos host card.
+  //
+  // One box and one button. An earlier version had four rows of controls and
+  // Fred's verdict was that it was too busy, which was right -- the feature
+  // is "describe it and get a card", and every extra control was me exposing
+  // my own plumbing.
+  //
+  // The agent designs the whole composition: where the mark sits, where the
+  // type sits, how the specs are arranged, what the art does and where.
+  // Atmos keeps only the three things that make it an Atmos card -- the mark
+  // is always on it, every spec row is always on it, and the type is always
+  // readable. Everything on it is built by an allow-list, so the serial and
+  // SKU rows further down this same page can never reach it.
+  property bool awaitingDesign: false
+  property string wish: ""
+
+  Connections {
+    target: Omarchy
+    enabled: Lab.on("machinecard")
+    function onLabAgentAnswerChanged() {
+      if (Omarchy.labAgentAnswer.length === 0 || !root.awaitingDesign) return
+      root.awaitingDesign = false
+      Omarchy.labApplyDesign(Omarchy.labAgentAnswer, root.wish)
+    }
+  }
+
+  PrefsGroup {
+    title: "Host card"
+    query: root.query
+    visible: Lab.on("machinecard")
+    detail: "A wallpaper-sized card of your specs, designed by your coding agent in your own theme. Nothing identifying goes on it: no serial, no SKU, no hostname, no addresses."
+
+    PrefsRow {
+      label: "Describe the card you want"
+      description: "A sentence or a paragraph, about the feeling rather than the layout. \"Dragons and fire.\" \"Cold machine deep underwater, almost silent.\" Your agent designs it from there."
+      query: root.query
+      stretchControl: true
+      keywords: ["card", "share", "wallpaper", "brag", "graphic", "custom", "art", "host"]
+
+      Column {
+        width: parent ? parent.width : 0
+        spacing: Theme.space
+
+        PrefsField {
+          width: parent.width
+          placeholder: "I want dragons and fire…"
+          value: root.wish
+          onEdited: function (value) { root.wish = value }
+          onSubmitted: function (value) { root.makeCard(value) }
+        }
+
+        Row {
+          spacing: Theme.space
+
+          PrefsButton {
+            text: Omarchy.labAgentBusy ? "Designing…" : "Make it"
+            primary: true
+            enabled: !Omarchy.labAgentBusy
+            onClicked: root.makeCard(root.wish)
+          }
+
+          PrefsText {
+            anchors.verticalCenter: parent.verticalCenter
+            text: {
+              if (Omarchy.labAgentBusy)
+                return "Your agent is designing it. " + Omarchy.labAgentSeconds + "s so far, usually under twenty."
+              if (Omarchy.labAgentError.length > 0)
+                return "Agent: " + Omarchy.labAgentError
+              if (Omarchy.labCardBusy) return "Reading the machine…"
+              return ""
+            }
+            color: Omarchy.labAgentError.length > 0 ? Theme.urgent : Theme.muted
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.captionSize
+          }
+        }
+
+        // No percentage, because an agent reports none. A bar with a number
+        // on it would be a lie; this says "alive" and the label says how long.
+        PrefsProgress {
+          width: parent.width
+          visible: Omarchy.labAgentBusy
+          indeterminate: true
+        }
+      }
+    }
+
+    PrefsRow {
+      label: "Your card"
+      description: Omarchy.labCard.rows.length + " facts · " + root.cardW + "x" + root.cardH + " · " + Omarchy.labCardLayout.art.motif
+      query: root.query
+      stretchControl: true
+
+      Item {
+        width: parent ? parent.width : 0
+        // Drawn at full output size and scaled to fit, so the preview and
+        // the exported file cannot disagree.
+        readonly property real fit: Math.min(1, (width > 0 ? width : root.cardW) / root.cardW)
+        implicitHeight: Math.round(root.cardH * fit) + Theme.space
+
+        MachineCard {
+          id: cardArt
+          width: root.cardW
+          height: root.cardH
+          card: Omarchy.labCard
+          layout: Omarchy.labCardLayout
+          transform: Scale { xScale: parent.fit; yScale: parent.fit }
+        }
+      }
+    }
+
+    PrefsRow {
+      label: "Keep it"
+      description: Omarchy.labCardStatus.length > 0
+        ? Omarchy.labCardStatus
+        : "Save writes a PNG. Copy puts the picture itself on the clipboard, not a path."
+      query: root.query
+
+      Row {
+        spacing: Theme.space
+
+        PrefsButton {
+          text: "Save"
+          onClicked: root.exportCard("save")
+        }
+
+        PrefsButton {
+          text: "Copy"
+          onClicked: root.exportCard("copy")
+        }
+
+        PrefsButton {
+          text: "Set as wallpaper"
+          primary: true
+          onClicked: root.exportCard("wallpaper")
+        }
+      }
+    }
+  }
+
+  // Output size follows the screen, so a saved card is a wallpaper that fits
+  // rather than something to scale afterwards.
+  readonly property int cardW: Omarchy.labCardWidth > 0 ? Omarchy.labCardWidth : 1920
+  readonly property int cardH: Omarchy.labCardHeight > 0 ? Omarchy.labCardHeight : 1080
+
+  function makeCard(value) {
+    root.wish = String(value || "")
+    if (root.wish.length === 0) return
+    root.awaitingDesign = true
+    Omarchy.labAskAgent(Omarchy.labDesignPrompt(root.wish, root.cardW, root.cardH))
+  }
+
+  // grabToImage lives here because only this page holds the live Item. Atmos
+  // owns the filesystem, clipboard and wallpaper ends.
+  function exportCard(what) {
+    var target = (Omarchy.picturesDir || Omarchy.home) + "/omarchy-host-card.png"
+    cardArt.grabToImage(function (result) {
+      if (!result || !result.saveToFile(target)) {
+        Omarchy.labCardStatus = "Could not write " + target
+        return
+      }
+      if (what === "copy") Omarchy.labCardCopy(target)
+      else if (what === "wallpaper") Omarchy.labCardWallpaper(target)
+      else Omarchy.labCardSaved(target)
+    }, Qt.size(root.cardW, root.cardH))
   }
 
   PrefsGroup {

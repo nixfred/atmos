@@ -8,6 +8,9 @@ import "Diagnostics.js" as DiagnosticsJs
 import "Hardware.js" as HardwareJs
 import "Hooks.js" as HooksJs
 import "History.js" as HistoryJs
+import "CardArt.js" as CardArtJs
+import "CardLayout.js" as CardLayoutJs
+import "MachineCard.js" as MachineCardJs
 import "Hubs.js" as HubsJs
 import "HyprPrefs.js" as HyprPrefs
 import "HyprSunset.js" as HyprSunset
@@ -2416,6 +2419,237 @@ QtObject {
   // Detection is a probe, not an assumption: a model being installed and a
   // server being up are different things, and the Ask bar must not offer a
   // button that will hang.
+  // Lab(machinecard): the shareable spec card.
+  //
+  // Two sources, both already in the tree: hw-inventory.py for the hardware
+  // and machine-card.sh for versions, sizes and counts. Neither is passed
+  // through to the card wholesale -- MachineCard.js names every field it
+  // uses, so a serial that exists in the inventory stays in the inventory.
+  readonly property string machineCardScript: shellDir + "/scripts/machine-card.sh"
+  property var labCardFacts: ({})
+  property var labCardLayout: CardLayoutJs.defaultLayout()
+  // Output size, read from the monitor Atmos is on. A host card is meant to
+  // end up as a wallpaper, so it is built at the size of the screen it came
+  // from rather than a fixed guess that would need scaling afterwards.
+  property int labCardWidth: 0
+  property int labCardHeight: 0
+  property var labCardHw: ({})
+  property string labCardTagline: ""
+  property bool labCardBusy: false
+  property string labCardStatus: ""
+
+  readonly property var labCard: MachineCardJs.build({
+    hardware: root.labCardHw,
+    omarchyVersion: root.labCardFacts.omarchyVersion,
+    kernel: root.labCardFacts.kernel,
+    compositor: root.labCardFacts.compositor,
+    shell: root.labCardFacts.shell,
+    uptime: root.labCardFacts.uptime,
+    theme: root.labCardFacts.theme,
+    storageTotal: root.labCardFacts.storageTotal,
+    vms: root.labCardFacts.vms,
+    tagline: root.labCardTagline
+  })
+
+  function labLoadCard() {
+    if (!Lab.on("machinecard")) return
+    root.labCardBusy = true
+    labCardFactsProc.command = ["bash", root.machineCardScript]
+    labCardFactsProc.running = true
+    labCardHwProc.command = ["python3", shellDir + "/scripts/hw-inventory.py"]
+    labCardHwProc.running = true
+    labCardSizeProc.command = [
+      "bash", "-c",
+      "hyprctl monitors -j 2>/dev/null | python3 -c \"import json,sys;m=json.load(sys.stdin);f=[x for x in m if x.get('focused')] or m;print(f[0]['width'],f[0]['height']) if f else print('')\""
+    ]
+    labCardSizeProc.running = true
+  }
+
+  property Process labCardSizeProc: Process {
+    command: ["true"]
+    stdout: StdioCollector { id: labCardSizeOut; waitForEnd: true }
+    onExited: function (exitCode) {
+      if (exitCode !== 0) return
+      var bits = String(labCardSizeOut.text || "").replace(/^\s+|\s+$/g, "").split(" ")
+      if (bits.length < 2) return
+      var w = Number(bits[0])
+      var h = Number(bits[1])
+      // Sanity-clamp. A bad read must not produce a 30000px grab that eats
+      // the machine's memory.
+      if (isFinite(w) && isFinite(h) && w >= 640 && h >= 480 && w <= 7680 && h <= 4320) {
+        root.labCardWidth = Math.round(w)
+        root.labCardHeight = Math.round(h)
+      }
+    }
+  }
+
+  // The tagline is written by the same local model the Ask page uses, and
+  // like everything else here it stays on this machine. With no model
+  // running the card falls back to a line built from its own facts rather
+  // than showing an empty space.
+  // Lab: the machine's default coding agent, asked one question, headless.
+  //
+  // The frontier model gives noticeably better art direction than a 3B local
+  // one -- asked for "dragons and fire" the local matcher said embers and
+  // the agent said scales, which is the better read. It costs a few seconds
+  // and a round trip, so the local path stays as the instant fallback.
+  //
+  // No terminal. omarchy-agent launches a TUI; agent-ask.sh maps the same
+  // configured default onto its non-interactive mode, so the answer comes
+  // back into this window.
+  readonly property string agentAskScript: shellDir + "/scripts/agent-ask.sh"
+  property bool labAgentBusy: false
+  property string labAgentAnswer: ""
+  property string labAgentError: ""
+  property int labAgentSeconds: 0
+  property string labAgentStdin: ""
+
+  function labAskAgent(prompt) {
+    var text = String(prompt || "")
+    if (!text || root.labAgentBusy) return
+    root.labAgentBusy = true
+    root.labAgentAnswer = ""
+    root.labAgentError = ""
+    root.labAgentSeconds = 0
+    root.labAgentStdin = text
+    labAgentProc.command = ["bash", root.agentAskScript]
+    labAgentProc.running = true
+  }
+
+  // There is no percentage to show. An agent does not report progress, so a
+  // bar would be a lie with a number on it; elapsed seconds is the honest
+  // version and still tells you it is alive.
+  property Timer labAgentTick: Timer {
+    interval: 1000
+    repeat: true
+    running: root.labAgentBusy
+    onTriggered: root.labAgentSeconds += 1
+  }
+
+  property Process labAgentProc: Process {
+    command: ["true"]
+    stdinEnabled: true
+    stdout: StdioCollector { id: labAgentOut; waitForEnd: true }
+    stderr: StdioCollector { id: labAgentErr; waitForEnd: true }
+    onStarted: {
+      if (root.labAgentStdin.length > 0) {
+        write(root.labAgentStdin)
+        root.labAgentStdin = ""
+        stdinEnabled = false
+      }
+    }
+    onExited: function (exitCode) {
+      root.labAgentBusy = false
+      if (exitCode !== 0) {
+        root.labAgentError = String(labAgentErr.text || "the agent did not answer")
+          .replace(/^\s+|\s+$/g, "")
+          .split("\n")[0]
+        return
+      }
+      root.labAgentAnswer = String(labAgentOut.text || "").replace(/^\s+|\s+$/g, "")
+      if (!root.labAgentAnswer) root.labAgentError = "the agent returned nothing"
+    }
+  }
+
+  // The agent is handed the real specs, the real theme and the real canvas
+  // size, then asked to design rather than to fill in a form.
+  function labDesignPrompt(wish, w, h) {
+    return CardLayoutJs.designPrompt({
+      wish: wish,
+      card: root.labCard,
+      width: w,
+      height: h,
+      themeName: root.labCardFacts.theme,
+      theme: {
+        background: String(Theme.background),
+        foreground: String(Theme.foreground),
+        accent: String(Theme.accent),
+        muted: String(Theme.muted)
+      }
+    })
+  }
+
+  // Whatever came back becomes a layout, or a sane default. readDesign
+  // clamps every number and drops anything it does not recognise, so a
+  // confused reply costs you a plain card and nothing else.
+  function labApplyDesign(reply, wish) {
+    var seed = CardArtJs.parseWish(String(wish || "")).seed
+    var read = CardLayoutJs.readDesign(reply, seed)
+    root.labCardLayout = read.layout
+    if (read.tagline) root.labCardTagline = read.tagline
+    else if (!root.labCardTagline) root.labCardTagline = MachineCardJs.defaultTagline(root.labCard)
+    if (!read.ok) root.labCardStatus = "The agent's reply could not be read, so Atmos designed it."
+  }
+
+  function labCardWriteTagline() {
+    if (!root.labLocalUp) {
+      root.labCardTagline = MachineCardJs.defaultTagline(root.labCard)
+      return
+    }
+    root.labCardTagline = ""
+    root.labAskLocal(MachineCardJs.taglinePrompt(root.labCard))
+  }
+
+  function labCardUseReply(reply) {
+    var line = MachineCardJs.cleanTagline(reply)
+    root.labCardTagline = line || MachineCardJs.defaultTagline(root.labCard)
+  }
+
+  // Save and copy both take a PNG the page has already grabbed. The page
+  // owns grabToImage because only it has the live Item; this end owns the
+  // filesystem and the clipboard.
+  function labCardSaved(path) {
+    root.labCardStatus = "Saved to " + String(path || "")
+  }
+
+  // omarchy theme bg set is the same path the Background page already uses,
+  // so a card becomes a wallpaper the same way any other picture does.
+  function labCardWallpaper(path) {
+    var file = String(path || "")
+    if (!file) return
+    root.setBackgroundPath(file)
+    root.labCardStatus = "Set as your background."
+  }
+
+  function labCardCopy(path) {
+    var file = String(path || "")
+    if (!file) return
+    // -t image/png so a paste target knows what it is getting. Without the
+    // type, most apps paste a file path as text instead of the picture.
+    runCommand(
+      ["bash", "-c", "wl-copy -t image/png < \"$1\"", "copy-card", file],
+      { key: "copy-card", refresh: "none" }
+    )
+    root.labCardStatus = "Copied. Paste it anywhere that takes an image."
+  }
+
+  property Process labCardFactsProc: Process {
+    command: ["true"]
+    stdout: StdioCollector { id: labCardFactsOut; waitForEnd: true }
+    onExited: function (exitCode) {
+      root.labCardBusy = false
+      if (exitCode !== 0) return
+      try {
+        root.labCardFacts = JSON.parse(labCardFactsOut.text || "{}")
+      } catch (e) {
+        root.labCardFacts = ({})
+      }
+    }
+  }
+
+  property Process labCardHwProc: Process {
+    command: ["true"]
+    stdout: StdioCollector { id: labCardHwOut; waitForEnd: true }
+    onExited: function (exitCode) {
+      if (exitCode !== 0) return
+      try {
+        root.labCardHw = JSON.parse(labCardHwOut.text || "{}")
+      } catch (e) {
+        root.labCardHw = ({})
+      }
+    }
+  }
+
   // Lab: one Atmos at a time, for real.
   //
   // Quickshell already refuses a second instance of the same config path,

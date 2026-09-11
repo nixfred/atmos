@@ -180,6 +180,25 @@ QtObject {
     return peekFile.text() || ""
   }
 
+  // Lab(machinecard): the Omarchy mark, recoloured to the current theme.
+  //
+  // The shipped SVG is solid black, which is invisible on every dark theme.
+  // MultiEffect colorization worked in a live window and came out black in a
+  // grabToImage export, so the colour is put into the SVG source instead and
+  // handed to Image as a data URI -- no effect pipeline, nothing that can
+  // behave differently when captured than when displayed.
+  function omarchyMarkUri(path, color) {
+    var raw = root.readPath(String(path || ""))
+    if (!raw) return ""
+    var hex = String(color)
+    if (hex.length === 9 && hex.charAt(0) === "#") hex = "#" + hex.slice(3)
+    var painted = raw
+      .replace(/fill="#000000"/g, 'fill="' + hex + '"')
+      .replace(/fill="#000"/g, 'fill="' + hex + '"')
+      .replace(/fill="black"/g, 'fill="' + hex + '"')
+    return "data:image/svg+xml;utf8," + encodeURIComponent(painted)
+  }
+
   function applyNamedTheme(name) {
     var paths = ThemeJs.themeFileCandidates(name, "colors.toml", root.home)
     var i
