@@ -155,6 +155,20 @@ PrefsPage {
         options: Omarchy.themes
         enabled: Omarchy.themes.length > 0
         onChanged: function(value) { if (value !== Omarchy.theme) Omarchy.setTheme(value) }
+
+        // Lab(hoverpreview): repaint Atmos in the hovered palette and put it
+        // back on the way out. Atmos is the shell, so it can show you a theme
+        // instead of describing one -- a settings app that is only a client
+        // of the desktop structurally cannot do this.
+        //
+        // Deliberately in-process: applyNamedTheme recolours this window and
+        // writes nothing. Previewing by running the real theme setter would
+        // mean a system write on every pointer move, which is how you thrash
+        // a machine and leave it on the wrong theme when a revert is missed.
+        onPreviewed: function(value) {
+          if (!Lab.on("hoverpreview")) return
+          Theme.applyNamedTheme(value.length > 0 ? value : Omarchy.theme)
+        }
       }
     }
 

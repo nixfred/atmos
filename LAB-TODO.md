@@ -16,7 +16,7 @@ Master switch: `ATMOS_LAB=0` reverts everything. `ATMOS_LAB_OFF=id,id` disables 
 | 5 | Preview mode (diff before write) | `previewmode` | todo | — |
 | 4 | Time machine (change history) | `timemachine` | todo | — |
 | 10 | Keyboard-first navigation | `keyboard` | DONE | `a765d44` |
-| 9 | Machine page | `machine` | todo | — |
+| 9 | Machine page | `machine` | DONE | `008520a` |
 | 2 | Ask bar (agent proposes, never writes) | `askbar` | DONE | `23e38f1` |
 
 ## Then

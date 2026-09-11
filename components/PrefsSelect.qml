@@ -20,6 +20,11 @@ Item {
 
   signal changed(string value)
 
+  // Lab(hoverpreview): emitted as the pointer moves over options, with ""
+  // when it leaves. A caller that wants to show the value live subscribes;
+  // one that does not is unaffected, because nothing here acts on its own.
+  signal previewed(string value)
+
   implicitWidth: Theme.controlColumnWidth
   implicitHeight: Theme.controlHeight
   width: implicitWidth
@@ -308,6 +313,8 @@ Item {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: root.pickValue(root.optionValue(modelData))
+            onEntered: if (Lab.on("hoverpreview")) root.previewed(root.optionValue(modelData))
+            onExited: if (Lab.on("hoverpreview")) root.previewed("")
           }
         }
 
