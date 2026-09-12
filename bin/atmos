@@ -6,6 +6,7 @@ set -euo pipefail
 SCRIPT=$(readlink -f -- "${BASH_SOURCE[0]}")
 ROOT=$(cd -- "$(dirname -- "$SCRIPT")/.." && pwd)
 PAGE=${1:-}
+APP_ID=dev.csfh.atmos
 
 if [[ ${ATMOS_PRINT_ROOT:-0} == 1 ]]; then
   printf '%s\n' "$ROOT"
@@ -40,12 +41,34 @@ ipc() {
   quickshell ipc -p "$ROOT" call -- prefs "$@"
 }
 
+# A Wayland client cannot raise itself across a workspace, so setting
+# window.visible on an already-visible window is a no-op and the launch looks
+# like nothing happened. Ask the compositor to pull the window to the active
+# workspace and focus it. Best effort: unknown compositor, no change.
+raise_window() {
+  command -v hyprctl >/dev/null 2>&1 || return 0
+  local sel=class:$APP_ID
+  # Hyprland with a Lua config evaluates dispatch arguments as Lua; a conf-based
+  # Hyprland takes the classic syntax. Whichever form is wrong for this build is
+  # a silent no-op, so try both rather than guessing.
+  hyprctl dispatch "hl.dsp.window.move({ workspace = \"e+0\", window = \"$sel\" })" >/dev/null 2>&1 || true
+  hyprctl dispatch "hl.dsp.focus({ window = \"$sel\" })" >/dev/null 2>&1 || true
+  hyprctl dispatch movetoworkspace "e+0,$sel" >/dev/null 2>&1 || true
+  hyprctl dispatch focuswindow "$sel" >/dev/null 2>&1 || true
+  return 0
+}
+
 focus_existing() {
+  local reply
   if [[ -n $PAGE ]]; then
-    ipc open "$PAGE"
+    reply=$(ipc open "$PAGE")
   else
-    ipc show
+    reply=$(ipc show)
   fi
+  # "ok" is the success reply and is just noise on every launch; anything else
+  # (an unknown page, an IPC error) still has to reach the user.
+  [[ $reply == ok ]] || printf '%s\n' "$reply" >&2
+  raise_window
 }
 
 if ipc ping >/dev/null 2>&1; then
@@ -71,7 +94,7 @@ if [[ -n $PAGE ]]; then
   export ATMOS_PAGE=$PAGE
 fi
 
-export QS_APP_ID=dev.csfh.atmos
+export QS_APP_ID=$APP_ID
 # Qt logs this on every launch when xdg-desktop-portal already has a connection
 # for the desktop file name. It does not stop the window from opening.
 export QT_LOGGING_RULES="${QT_LOGGING_RULES:-qt.qpa.services=false}"
