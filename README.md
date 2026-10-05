@@ -1,6 +1,6 @@
 # Atmos
 
-A [Quickshell](https://quickshell.org) preferences window for [Omarchy](https://omarchy.org). It follows the active theme and writes through `omarchy` commands and Hyprland drop-ins. Settings live in `~/.config`.
+A [Quickshell](https://quickshell.org) preferences window for [Omarchy](https://omarchy.org). It follows the active theme and writes through `omarchy` commands and Hyprland drop-ins. Settings live in `~/.config`. Product site: [atmos.csfh.dev](https://atmos.csfh.dev) (source in [`site/`](site/)).
 
 ## Run
 
@@ -8,7 +8,11 @@ A [Quickshell](https://quickshell.org) preferences window for [Omarchy](https://
 ./bin/atmos
 ```
 
-A second launch focuses the window that is already open. Pass a page if you want to land somewhere specific:
+Every launch opens its own window: run it twice and two windows open, each
+with its own engine. Open windows stay in sync through the files they
+share — a change in one appears in the other — and concurrent writes
+serialize on disk, so they cannot tear a config file. Pass a page if you
+want a window to land somewhere specific:
 
 ```bash
 ./bin/atmos appearance
@@ -16,7 +20,9 @@ A second launch focuses the window that is already open. Pass a page if you want
 ./bin/atmos network/wifi
 ```
 
-Hubs include favorites, appearance, displays, windows, bar, notifications, input, accessibility, sound, capture, hardware, drivers, disks, network, power, idle, defaults, applications, software, hooks, security, accounts, and system.
+Hubs include ask, home, monitor, favorites, appearance, displays, windows, bar, notifications, input, accessibility, sound, capture, hardware, drivers, disks, network, power, idle, defaults, applications, software, hooks, security, accounts, and system.
+
+This local version retains the Ask page for finding settings in plain words. Open it with `./bin/atmos ask` or **Ctrl+Shift+K**. **Ctrl+K** follows upstream navigation. Machine information is now on Hardware, and the old `machine` launcher alias still works.
 
 ## Install
 

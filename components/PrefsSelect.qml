@@ -18,11 +18,14 @@ Item {
 
   readonly property bool useSearch: searchable || (options && options.length >= 8)
 
+  // SettingRow keeps the row rail while this list is open on Overlay.
+  readonly property bool overlayOpen: popup.opened
+
   signal changed(string value)
 
-  // Emitted as the pointer moves over options, and with "" when it leaves.
-  // A caller that wants to show the value live subscribes; one that does not
-  // is unaffected.
+  // Opt-in live preview. Emitted as the pointer (or highlight) moves over
+  // options, and with "" when it leaves the list or the popup closes.
+  // Callers that do not subscribe are unaffected.
   signal previewed(string value)
 
   // Last value handed out, so a repeat of the same option does not re-apply
@@ -34,6 +37,12 @@ Item {
     if (next === root.hoveredOption) return
     root.hoveredOption = next
     root.previewed(next)
+  }
+
+  // Pick already committed through changed(). Clearing without emitting
+  // "" means the subscriber must not restore over that paint.
+  function clearHover() {
+    root.hoveredOption = ""
   }
 
   implicitWidth: Theme.controlColumnWidth
@@ -98,7 +107,7 @@ Item {
     changed(next)
     if (value === next) _holding = false
     refreshDisplayLabel()
-    root.hoverOption("")
+    root.clearHover()
     popup.close()
   }
 
@@ -215,9 +224,8 @@ Item {
     }
     onClosed: {
       root.filter = ""
-      // Closing by any route -- Escape, click-away, picking a value -- puts
-      // the real value back. Without this, dismissing the popup while a row
-      // is hovered leaves you looking at a preview you never chose.
+      // Dismiss by Escape or click-away puts the live value back. pickValue
+      // already cleared hoveredOption, so this is a no-op after a click.
       root.hoverOption("")
     }
 
@@ -230,6 +238,13 @@ Item {
 
     contentItem: Column {
       width: popup.width
+
+      // One revert site, so there is no race between a row losing the
+      // pointer and its neighbour gaining it.
+      HoverHandler {
+        id: listHover
+        onHoveredChanged: if (!hovered) root.hoverOption("")
+      }
 
       Rectangle {
         visible: root.useSearch
@@ -268,13 +283,6 @@ Item {
         }
       }
 
-      // One place that reverts, so there is no race between a row losing the
-      // pointer and its neighbour gaining it.
-      HoverHandler {
-        id: listHover
-        onHoveredChanged: if (!hovered) root.hoverOption("")
-      }
-
       ListView {
         id: list
         clip: true
@@ -288,6 +296,11 @@ Item {
         highlightFollowsCurrentItem: true
         Keys.onReturnPressed: root.pickCurrent()
         Keys.onSpacePressed: root.pickCurrent()
+        onCurrentIndexChanged: {
+          if (!popup.opened || currentIndex < 0) return
+          if (currentIndex >= (root.shownOptions || []).length) return
+          root.hoverOption(root.optionValue(root.shownOptions[currentIndex]))
+        }
 
         // Same viewport wheel handler as PrefsFlickable. Delegate MouseAreas
         // swallow the wheel, and a WheelHandler on this ListView never fires.

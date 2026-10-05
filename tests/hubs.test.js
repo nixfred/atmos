@@ -28,6 +28,8 @@ assert(catalog.length > 0, "hubs() returns the catalog");
 assertEqual(hubs.hubTitle("idle"), "Idle", "idle hub title is Idle");
 assertEqual(hubs.hubTitle("export"), "Omafile", "export hub title is Omafile");
 assertEqual(hubs.hubTitle("system/kernel"), "Kernel", "kernel is a System child");
+assertEqual(hubs.hubById("system/machine"), null, "machine is not a System child");
+assertEqual(hubs.hubTitle("system/history"), "History", "history is a System child");
 assert(
   hubs.hubById("export").keywords.indexOf("omafile") !== -1 &&
     hubs.hubById("export").keywords.indexOf("import") !== -1 &&
@@ -98,6 +100,9 @@ catalog.forEach(function (hub) {
 });
 
 const pageFiles = [
+  "AskPage.qml",
+  "HomePage.qml",
+  "MonitorPage.qml",
   "FavoritesPage.qml",
   "AppearancePage.qml",
   "DisplaysPage.qml",
@@ -137,6 +142,12 @@ const pageFiles = [
   "TweaksPage.qml",
   "ServicesPage.qml",
   "ProfilesPage.qml",
+  "monitor/ProcessesPage.qml",
+  "monitor/CpuPage.qml",
+  "monitor/MemoryPage.qml",
+  "monitor/DiskPage.qml",
+  "monitor/TrafficPage.qml",
+  "monitor/SensorsPage.qml",
 ];
 pageFiles.forEach(function (file) {
   const id = hubs.fileHub(file);
@@ -165,27 +176,34 @@ const fakeChildren = hubs.childIds();
 assert(fakeChildren.indexOf("appearance/theme") === -1, "theme is not an appearance child");
 assert(fakeChildren.indexOf("hardware/gpu") === -1, "gpu is not a hardware child");
 const aliases = hubs.launcherSuffixes();
-["theme", "gpu", "cpu", "npu", "machine"].forEach(function (alias) {
+["theme", "gpu", "cpu", "npu"].forEach(function (alias) {
   assert(aliases.indexOf(alias) !== -1, "launcherSuffixes includes alias " + alias);
 });
 
 const nav = hubs.navPages();
-// Ask leads the catalogue: it is the page you want when you do not know
-// which of the others you want. Favorites follows it.
-assertEqual(nav[0].id, "ask", "navPages starts at ask");
-assertEqual(nav[1].id, "favorites", "favorites follows ask");
-assertEqual(nav[0].group, "ask", "navPages uses navGroup as group");
-assertEqual(nav[1].group, "look", "favorites still groups under look");
-// Index 0 is Ask now; this checks Favorites, which is the hub that owns
-// "star" and the union behaviour being tested.
+assertEqual(nav[0].id, "ask", "navPages retains Ask first");
+assertEqual(nav[0].group, "ask", "Ask has its own nav group");
+assertEqual(nav[1].id, "home", "Home follows Ask");
+assertEqual(hubs.hubById("ask").snapshotGroup, "", "Ask does not need a snapshot group");
+assertEqual(nav[1].group, "home", "navPages uses navGroup as group");
+assert(nav[1].keywords.indexOf("dashboard") !== -1, "navPages keywords include the union");
+assertEqual(hubs.hubById("home").navGroup, "home", "home nav cluster is home");
+assertEqual(hubs.hubById("dashboard"), null, "dashboard is no longer a hub");
+assertEqual(hubs.hubTitle("monitor"), "Monitor", "monitor hub title is Monitor");
+assertEqual(hubs.hubById("monitor").navGroup, "home", "monitor nav cluster is home");
+assertEqual(hubs.hubTitle("monitor/processes"), "Processes", "processes is a Monitor child");
+assertEqual(hubs.snapshotGroupForHub("monitor"), "look", "monitor snapshot group is look");
 assert(
-  nav
-    .filter(function (p) {
-      return p.id === "favorites";
-    })[0]
-    .keywords.indexOf("star") !== -1,
-  "navPages keywords include the union",
+  hubs.hubById("monitor").keywords.indexOf("htop") !== -1 &&
+    hubs.hubById("monitor").keywords.indexOf("process") !== -1,
+  "Monitor search matches htop and process",
 );
+assert(
+  hubs.hubById("home").keywords.indexOf("thermal") !== -1 &&
+    hubs.hubById("home").keywords.indexOf("gpu") !== -1,
+  "Home search matches thermal and gpu",
+);
+assertEqual(hubs.snapshotGroupForHub("home"), "look", "home snapshot group is look");
 function consecutiveNavGroup(group) {
   const ids = nav
     .filter(function (page) {
@@ -226,14 +244,9 @@ assertEqual(
 );
 
 const search = hubs.searchHubs();
-// Index 0 is Ask now; this checks the hub whose description carries "starred".
-assertEqual(
-  search.filter(function (h) {
-    return h.description.indexOf("starred") !== -1;
-  }).length > 0,
-  true,
-  "searchHubs keeps descriptions",
-);
+assertEqual(search[0].id, "ask", "searchHubs retains Ask first");
+assertEqual(search[1].id, "home", "searchHubs includes Home after Ask");
+assert(search[1].description.indexOf("processes") !== -1, "searchHubs keeps descriptions");
 assert(Array.isArray(search[0].keywords), "searchHubs keywords are an array");
 assert(
   hubs.hubById("input").keywords.indexOf("keyboard") !== -1,

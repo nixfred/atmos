@@ -15,16 +15,19 @@ PrefsPage {
   property var navigator: null
 
   function openSubpage(id) {
-    if (root.navigator && root.navigator.go) {
-      root.navigator.go("system/" + id)
+    if (id === "machine") {
+      if (root.navigator && root.navigator.go) root.navigator.go("hardware")
       return
     }
-    if (!stack) return
-    if (id === "diagnostics") stack.push(diagnosticsPage)
-    else if (id === "environment") stack.push(environmentPage)
-    else if (id === "kernel") stack.push(kernelPage)
-    else if (id === "history") stack.push(historyPage)
-    else if (id === "machine") stack.push(machinePage)
+    if (stack) {
+      if (id === "environment") stack.push(environmentPage)
+      else if (id === "kernel") stack.push(kernelPage)
+      else if (id === "history") stack.push(historyPage)
+      else if (id === "diagnostics") stack.push(diagnosticsPage)
+      return
+    }
+    if (root.navigator && root.navigator.go)
+      root.navigator.go("system/" + id)
   }
 
   readonly property string diagnosticsDescription: {
@@ -40,7 +43,6 @@ PrefsPage {
   Component { id: environmentPage; Sys.EnvironmentPage {} }
   Component { id: kernelPage; Sys.KernelPage {} }
   Component { id: historyPage; Sys.HistoryPage {} }
-  Component { id: machinePage; Sys.MachinePage {} }
 
   PrefsConfirm {
     id: channelConfirm
@@ -438,6 +440,7 @@ PrefsPage {
   PrefsGroup {
     framed: true
     title: "Advanced"
+    advanced: true
     query: root.query
     detail: "Leftover packages, the pacman download cache, and restore for Hyprland Lua or shell.json. Firmware updates are on Drivers."
 
@@ -775,25 +778,13 @@ PrefsPage {
 
     SettingRow {
       label: "History"
-      description: "Every change Atmos made, and a preview mode that shows a change before it happens."
+      description: "Every change this window made, and a preview mode that shows a change before it happens. In memory for this session, not a disk log."
       query: root.query
       keywords: ["history", "undo", "changes", "preview", "audit"]
 
       PrefsButton {
         text: "Open…"
         onClicked: root.openSubpage("history")
-      }
-    }
-
-    SettingRow {
-      label: "Machine"
-      description: "What this computer is and how it is doing, in one screen."
-      query: root.query
-      keywords: ["machine", "hardware", "battery", "dashboard", "cpu", "memory"]
-
-      PrefsButton {
-        text: "Open…"
-        onClicked: root.openSubpage("machine")
       }
     }
 

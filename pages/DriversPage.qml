@@ -35,13 +35,6 @@ PrefsPage {
     firmwareConfirm.parent = root.prefsOverlay
   }
 
-  function hasText() {
-    for (var i = 0; i < arguments.length; i++) {
-      if (String(arguments[i] || "").length) return true
-    }
-    return false
-  }
-
   function copyField(text) {
     Omarchy.copyText(String(text || ""))
   }
@@ -126,21 +119,6 @@ PrefsPage {
     title: "Firmware"
     query: root.query
     detail: "Identity is on Hardware. Update asks fwupd to install vendor firmware."
-
-    SettingRow {
-      available: root.hasText(root.hw.bios.vendor, root.hw.bios.version, root.hw.bios.date) || root.hw.bios.uefi
-      label: "BIOS"
-      description: HardwareJs.biosSummary(root.hw.bios) || (root.hw.bios.uefi ? "UEFI firmware." : "")
-      hint: "/sys/class/dmi/id/bios_version"
-      query: root.query
-      keywords: ["bios", "uefi", "efi"]
-
-      PrefsButton {
-        text: "Copy"
-        enabled: root.hasText(HardwareJs.biosSummary(root.hw.bios), root.hw.bios.version)
-        onClicked: root.copyField(HardwareJs.biosSummary(root.hw.bios) || root.hw.bios.version)
-      }
-    }
 
     SettingRow {
       label: "Firmware"

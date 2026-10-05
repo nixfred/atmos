@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Window
 import "../services"
+import "../services/Disclosure.js" as DisclosureJs
 import "../services/Favorites.js" as FavJs
 import "../services/Hubs.js" as HubsJs
 import "../services/ShellConfig.js" as ShellConfigJs
@@ -22,10 +23,8 @@ Item {
   property string valueText: ""
   property bool stretchControl: false
   property bool available: true
-
-  // Mark a row advanced and it folds away in Simple mode. Folded is not
-  // removed -- search still reaches it and unfolds it, which is the
-  // difference between progressive disclosure and hiding options.
+  // Opt-in fold. Simple hides the row; search and section help still
+  // reach it. Untagged rows never fold, so untriaged pages stay as they are.
   property bool advanced: false
   // List rows (wifi SSIDs, devices) stay out of the section modal.
   property bool sectionHelp: true
@@ -52,8 +51,16 @@ Item {
   }
 
   readonly property bool matches: ShellConfigJs.haystackMatches(query, searchHaystack)
-  readonly property bool folded: root.advanced && Disclosure.simple
-    && String(root.query || "").length === 0
+  readonly property bool folded: DisclosureJs.rowFolded({
+    advanced: root.advanced,
+    query: root.query,
+    label: root.label,
+    hub: root.resolvedHubId
+  }, {
+    simple: Disclosure.simple,
+    revealedHub: Disclosure.revealedHub,
+    revealedLabel: Disclosure.revealedLabel
+  })
   readonly property bool shown: available && matches && !folded
 
   property string favoriteHub: ""
@@ -83,16 +90,16 @@ Item {
 
   readonly property bool hovered: rowHover.hovered
 
-  // Lit when the pointer is over the row, or when anything inside it holds
-  // the keyboard.
+  // Fill when the pointer is over the row, or when anything inside it
+  // holds the keyboard. The rail is keyboard-only, so hover on A and Tab
+  // on B stay distinguishable.
   //
   // root.activeFocus is not enough on its own. A plain Item reports
   // activeFocus only for itself, and focus actually lands on the control
   // inside the row -- so a Tab into a field would light nothing, which is
   // the case this exists for. Walk up from the window's focus item instead.
   readonly property var focusItem: root.Window.activeFocusItem
-  readonly property bool lit: {
-    if (root.hovered) return true
+  readonly property bool focusInside: {
     var item = root.focusItem
     var guard = 0
     while (item && guard < 40) {
@@ -102,6 +109,29 @@ Item {
     }
     return false
   }
+
+  // Overlay popups reparent off the row and take focus with them. A
+  // descendant that exposes overlayOpen keeps the rail lit for the opener.
+  function childHoldsOverlay(item, depth) {
+    if (!item || depth > 8) return false
+    if (item.overlayOpen === true) return true
+    var kids = item.children
+    for (var i = 0; i < kids.length; i++) {
+      if (childHoldsOverlay(kids[i], depth + 1)) return true
+    }
+    return false
+  }
+
+  readonly property bool childOverlayOpen: {
+    var _n = root.controlCount
+    var _lead = leadingSlot.children.length
+    if (childHoldsOverlay(controlSlot, 0)) return true
+    if (childHoldsOverlay(leadingSlot, 0)) return true
+    return false
+  }
+
+  readonly property bool keyboardHere: root.focusInside || root.childOverlayOpen
+  readonly property bool lit: root.hovered || root.keyboardHere
 
   HoverHandler {
     id: rowHover
@@ -174,27 +204,22 @@ Item {
   // happen to sit near each other.
   //
   // Full-bleed and behind the splitter, so it reads as the row being lit
-  // rather than a box drawn on top of it.
+  // rather than a box drawn on top of it. Instant on/off, like the rest of
+  // the chrome. Hover is fill only; the accent rail marks keyboard location.
   Rectangle {
     anchors.fill: parent
     z: -2
     visible: root.lit
-    color: Theme.fill(Theme.selectedFill * 0.55)
-
-    Behavior on opacity {
-      NumberAnimation { duration: Theme.motionFast }
-    }
+    color: Theme.fill(Theme.hoverFill)
   }
 
-  // The left edge. The band alone is easy to miss on a light theme where the
-  // fill is subtle; a hard edge is not.
   Rectangle {
     anchors.left: parent.left
     anchors.top: parent.top
     anchors.bottom: parent.bottom
     width: Theme.railWidth
     z: -1
-    visible: root.lit
+    visible: root.keyboardHere
     color: Theme.accent
   }
 

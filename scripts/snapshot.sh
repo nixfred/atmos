@@ -12,6 +12,39 @@ present() {
   command -v "$1" >/dev/null 2>&1
 }
 
+# Sysfs charge end-threshold. Dell exposes the stored value in Adaptive, where
+# firmware ignores it. Kernel marks the active type in [brackets], so
+# " Custom " means Custom is offered but not selected; "[Custom]" is left alone.
+fill_sysfs_charge_limit() {
+  local power_supply_dir=${ATMOS_POWER_SUPPLY_DIR:-/sys/class/power_supply}
+  local bat types charge_modes=""
+  charge_limit=0
+  charge_limit_available=false
+  for bat in "$power_supply_dir"/BAT*/charge_control_end_threshold; do
+    [[ -r $bat ]] || continue
+    charge_limit_available=true
+    charge_limit=$(< "$bat")
+    charge_limit=${charge_limit%$'\n'}
+    [[ $charge_limit =~ ^[0-9]+$ ]] || charge_limit=0
+    types=${bat%/*}/charge_types
+    if [[ -r $types ]]; then
+      charge_modes=" $(< "$types") "
+    fi
+    if [[ $charge_modes == *" Custom "* ]]; then
+      charge_limit=0
+    fi
+    break
+  done
+}
+
+# Tests point ATMOS_POWER_SUPPLY_DIR at a fake tree and stop here so the
+# Custom-guard can run without omarchy or a full snapshot.
+if [[ ${ATMOS_CHARGE_LIMIT_PROBE:-0} == 1 ]]; then
+  fill_sysfs_charge_limit
+  printf '%s %s\n' "$charge_limit" "$charge_limit_available"
+  exit 0
+fi
+
 lines_json() {
   jq -R -s 'split("\n") | map(select(length > 0))'
 }
@@ -296,6 +329,9 @@ fill_look_surface() {
     --argjson inactiveOpacity "$(hypr_opt decoration:inactive_opacity)" \
     --argjson preserveSplit "$(hypr_opt dwindle:preserve_split)" \
     --argjson focusOnActivate "$(hypr_opt misc:focus_on_activate)" \
+    --argjson enableSwallow "$(hypr_opt misc:enable_swallow)" \
+    --argjson swallowRegex "$(hypr_opt misc:swallow_regex)" \
+    --argjson onFocusUnderFullscreen "$(hypr_opt misc:on_focus_under_fullscreen)" \
     '
     def num(o; fb):
       if o.int != null then o.int
@@ -325,7 +361,10 @@ fill_look_surface() {
       activeOpacity: num($activeOpacity; 1),
       inactiveOpacity: num($inactiveOpacity; 1),
       preserveSplit: flag($preserveSplit; false),
-      focusOnActivate: flag($focusOnActivate; false)
+      focusOnActivate: flag($focusOnActivate; false),
+      enableSwallow: flag($enableSwallow; false),
+      swallowRegex: txt($swallowRegex; ""),
+      onFocusUnderFullscreen: num($onFocusUnderFullscreen; 1)
     }
   ' 2>/dev/null || echo '{}')
   [[ -n $hypr_look_json ]] || hypr_look_json='{}'
@@ -533,6 +572,9 @@ fill_atmos_control() {
     if [[ -f $env_file ]] && grep -q '^ELECTRON_OZONE_PLATFORM_HINT=auto' "$env_file"; then
       electron=false
     fi
+    if [[ -f $env_file ]] && grep -q '^ATMOS_XWAYLAND_ZERO_SCALING=0' "$env_file"; then
+      zero=false
+    fi
     if [[ -f $sysctl_file ]]; then
       swap=true
     fi
@@ -551,15 +593,7 @@ fill_atmos_control() {
       amd_pstate=$(< /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference)
       amd_pstate=${amd_pstate%$'\n'}
     fi
-    local bat
-    for bat in /sys/class/power_supply/BAT*/charge_control_end_threshold; do
-      [[ -r $bat ]] || continue
-      charge_limit_available=true
-      charge_limit=$(< "$bat")
-      charge_limit=${charge_limit%$'\n'}
-      [[ $charge_limit =~ ^[0-9]+$ ]] || charge_limit=0
-      break
-    done
+    fill_sysfs_charge_limit
     if present nmcli; then
       net_gateway=$(nmcli -g IP4.GATEWAY device show 2>/dev/null | awk 'NF{print; exit}' || true)
       net_dns_servers_json=$(nmcli -g IP4.DNS device show 2>/dev/null | awk 'NF' | jq -R -s -c 'split("\n") | map(select(length>0))' 2>/dev/null || echo '[]')
@@ -2165,6 +2199,9 @@ hypr_look_json=$(jq -n \
   --argjson inactiveOpacity "$(hypr_opt decoration:inactive_opacity)" \
   --argjson preserveSplit "$(hypr_opt dwindle:preserve_split)" \
   --argjson focusOnActivate "$(hypr_opt misc:focus_on_activate)" \
+  --argjson enableSwallow "$(hypr_opt misc:enable_swallow)" \
+  --argjson swallowRegex "$(hypr_opt misc:swallow_regex)" \
+  --argjson onFocusUnderFullscreen "$(hypr_opt misc:on_focus_under_fullscreen)" \
   '
   def num(o; fb):
     if o.int != null then o.int
@@ -2194,7 +2231,10 @@ hypr_look_json=$(jq -n \
     activeOpacity: num($activeOpacity; 1),
     inactiveOpacity: num($inactiveOpacity; 1),
     preserveSplit: flag($preserveSplit; false),
-    focusOnActivate: flag($focusOnActivate; false)
+    focusOnActivate: flag($focusOnActivate; false),
+    enableSwallow: flag($enableSwallow; false),
+    swallowRegex: txt($swallowRegex; ""),
+    onFocusUnderFullscreen: num($onFocusUnderFullscreen; 1)
   }
 ' 2>/dev/null || echo '{}')
 [[ -n $hypr_look_json ]] || hypr_look_json='{}'

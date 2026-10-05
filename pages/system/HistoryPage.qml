@@ -15,20 +15,23 @@ import "../../services/History.js" as HistoryJs
 // held and shown rather than made, so you can flip a control and read the
 // command it would run. Nothing held ever executes on its own -- Apply is
 // the only path, and Discard is one click.
+//
+// The list is in memory for this window. Another Atmos window has its own.
 
 PrefsPage {
   id: root
+  hubId: "system/history"
   title: "History"
-  description: "Every change Atmos made, newest first. Turn on Preview to see a change before it happens instead of after."
+  description: "Every change this window made, newest first, in memory for the session. Turn on Preview to see a change before it happens instead of after."
 
   readonly property var counts: HistoryJs.countsBySource(Omarchy.changeHistory)
 
   PrefsGroup {
     title: "Preview"
     query: root.query
-    detail: "While Preview is on, Atmos shows you what a control would run and does not run it. Apply releases everything held; Discard throws it away."
+    detail: "While Preview is on, Atmos shows you what a control would run and does not run it. Apply releases everything held; Discard throws it away. Nothing held runs on its own. The flag is not saved across a restart."
 
-    PrefsRow {
+    SettingRow {
       label: "Preview changes"
       description: Preview.active
         ? "On. Controls will not write. Anything you change is held below."
@@ -45,7 +48,7 @@ PrefsPage {
       }
     }
 
-    PrefsRow {
+    SettingRow {
       label: "Held"
       description: Omarchy.heldChanges.length === 1
         ? "1 change is waiting. Nothing has been written."
@@ -71,7 +74,7 @@ PrefsPage {
     Repeater {
       model: Omarchy.heldChanges
 
-      delegate: PrefsRow {
+      delegate: SettingRow {
         required property var modelData
         label: modelData && modelData.file ? modelData.file : (modelData ? modelData.key : "")
         description: modelData ? modelData.text : ""
@@ -84,16 +87,16 @@ PrefsPage {
   PrefsGroup {
     title: "Changes"
     query: root.query
-    detail: "Recorded in memory for this session. Atmos keeps the most recent 200."
+    detail: "Recorded in memory for this window. Atmos keeps the most recent 200. Another window has its own list; nothing is written to disk."
 
-    PrefsRow {
+    SettingRow {
       label: "Nothing yet"
       description: "Change something and it will show up here with the command it ran."
       query: root.query
       available: Omarchy.changeHistory.length === 0
     }
 
-    PrefsRow {
+    SettingRow {
       label: "By you"
       description: "Changes made from a control in this window."
       query: root.query
@@ -104,7 +107,7 @@ PrefsPage {
     Repeater {
       model: Omarchy.changeHistory
 
-      delegate: PrefsRow {
+      delegate: SettingRow {
         required property var modelData
         label: modelData && modelData.file
           ? modelData.file

@@ -20,13 +20,13 @@ PrefsPage {
         return
       }
     }
-    if (root.navigator && root.navigator.go) {
-      root.navigator.go("windows/" + id)
+    if (stack) {
+      if (id === "bindings") stack.push(bindingsPage)
+      else if (id === "rules") stack.push(rulesPage)
       return
     }
-    if (!stack) return
-    if (id === "bindings") stack.push(bindingsPage)
-    else if (id === "rules") stack.push(rulesPage)
+    if (root.navigator && root.navigator.go)
+      root.navigator.go("windows/" + id)
   }
 
   function overrideCountText() {
@@ -348,6 +348,7 @@ PrefsPage {
 
   PrefsGroup {
     title: "Advanced"
+    advanced: true
     query: root.query
     detail: "Dim, animations, cursor, and tearing. These go in the same looknfeel.lua block as the sliders above."
 

@@ -20,6 +20,10 @@ assert(
   searchPageSrc.indexOf('SearchIndex.js", "query"') === -1,
   "SearchPage does not spawn a query process per keystroke",
 );
+assert(
+  searchPageSrc.indexOf("root.navigator.go(modelData.hub, modelData.label)") !== -1,
+  "SearchPage passes the hit label so Simple can pin the landing row",
+);
 const omarchyQml = fs.readFileSync(path.join(__dirname, "..", "services", "Omarchy.qml"), "utf8");
 assert(
   omarchyQml.indexOf('enqueueRead(ioQueue, "rest")') !== -1,
@@ -89,6 +93,17 @@ assert(
 assert(
   selectSrc.indexOf("popup.parent = overlay") !== -1,
   "PrefsSelect reparents the list onto Overlay so the pane clip cannot crop it",
+);
+assert(
+  selectSrc.indexOf("readonly property bool overlayOpen:") !== -1 &&
+    selectSrc.indexOf("overlayOpen: popup.opened") !== -1,
+  "PrefsSelect exposes overlayOpen so SettingRow can keep the row rail",
+);
+const menuSrc = fs.readFileSync(path.join(__dirname, "..", "components", "PrefsMenu.qml"), "utf8");
+assert(
+  menuSrc.indexOf("readonly property bool overlayOpen:") !== -1 &&
+    menuSrc.indexOf("overlayOpen: popup.opened") !== -1,
+  "PrefsMenu exposes overlayOpen so SettingRow can keep the row rail",
 );
 assert(
   selectSrc.indexOf("parent: list") !== -1 &&
@@ -217,6 +232,40 @@ assert(
   snapshotSh.indexOf("grep -q 'action = \"workspace\"'") === -1,
   "snapshot.sh does not grep the whole input.lua for a workspace gesture",
 );
+assertEqual(
+  (snapshotSh.match(/hypr_opt misc:enable_swallow/g) || []).length,
+  2,
+  "snapshot.sh look and full dumps query misc:enable_swallow",
+);
+assertEqual(
+  (snapshotSh.match(/hypr_opt misc:swallow_regex/g) || []).length,
+  2,
+  "snapshot.sh look and full dumps query misc:swallow_regex",
+);
+assertEqual(
+  (snapshotSh.match(/hypr_opt misc:on_focus_under_fullscreen/g) || []).length,
+  2,
+  "snapshot.sh look and full dumps query misc:on_focus_under_fullscreen",
+);
+assertEqual(
+  (snapshotSh.match(/enableSwallow: flag\(\$enableSwallow; false\)/g) || []).length,
+  2,
+  "snapshot.sh emits enableSwallow from the live option",
+);
+assertEqual(
+  (snapshotSh.match(/swallowRegex: txt\(\$swallowRegex; ""\)/g) || []).length,
+  2,
+  "snapshot.sh emits swallowRegex from the live option",
+);
+assertEqual(
+  (snapshotSh.match(/onFocusUnderFullscreen: num\(\$onFocusUnderFullscreen; 1\)/g) || []).length,
+  2,
+  "snapshot.sh emits onFocusUnderFullscreen from the live option",
+);
+assert(
+  snapshotSh.indexOf("^ATMOS_XWAYLAND_ZERO_SCALING=0") !== -1,
+  "snapshot.sh reads the XWayland zero-scaling opt-out from the env file",
+);
 const workflow = fs.readFileSync(
   path.join(__dirname, "..", ".github", "workflows", "tests.yml"),
   "utf8",
@@ -261,9 +310,14 @@ assert(
 );
 assert(
   themeQml.indexOf("readonly property int radius: 0") !== -1 &&
+    themeQml.indexOf("readonly property int chamfer:") !== -1 &&
+    themeQml.indexOf("readonly property int chamferSm:") !== -1 &&
     themeQml.indexOf("readonly property int contentMaxWidth: 1000") !== -1 &&
+    themeQml.indexOf("readonly property int contentWideMaxWidth: 1400") !== -1 &&
+    themeQml.indexOf("readonly property int sectionMinColumn: 520") !== -1 &&
+    themeQml.indexOf("readonly property int sectionMaxColumns: 2") !== -1 &&
     themeQml.indexOf("readonly property int railWidth:") !== -1,
-  "Theme keeps square chrome, a capped content column, and a sidebar rail",
+  "Theme keeps square chrome, a capped single column, and a two-column wide cap",
 );
 assert(
   themeQml.indexOf("function controlOpacity(on)") !== -1,
@@ -282,6 +336,27 @@ assert(
 assert(
   prefsButtonSrc.indexOf("TextMetrics") !== -1 && prefsButtonSrc.indexOf("labelMetrics") !== -1,
   "PrefsButton sizes from TextMetrics so a hidden row still gets a width",
+);
+assert(
+  prefsButtonSrc.indexOf("Chamfer") !== -1 &&
+    prefsButtonSrc.indexOf("Theme.chamferSm") !== -1 &&
+    prefsButtonSrc.indexOf('color: "transparent"') !== -1 &&
+    prefsButtonSrc.indexOf("border.width: 0") !== -1,
+  "PrefsButton keeps a Rectangle root and paints a chamfered silhouette",
+);
+assert(
+  prefsButtonSrc.indexOf("Behavior on bodyColor") !== -1 &&
+    prefsButtonSrc.indexOf("Behavior on edgeColor") !== -1 &&
+    prefsButtonSrc.indexOf("mouse.containsMouse") !== -1 &&
+    prefsButtonSrc.indexOf("root.activeFocus") !== -1 &&
+    prefsButtonSrc.indexOf("Theme.fill(Theme.hoverFill)") !== -1 &&
+    prefsButtonSrc.indexOf("Theme.accentFill(Theme.primaryFill)") !== -1,
+  "PrefsButton still animates hover, focus, and primary fill on the chamfer",
+);
+assert(
+  prefsButtonSrc.indexOf("anchors.fill: parent") !== -1 &&
+    prefsButtonSrc.indexOf("hoverEnabled: true") !== -1,
+  "PrefsButton keeps a full-rect MouseArea so a transparent root still clicks",
 );
 const prefsSliderSrc = fs.readFileSync(
   path.join(__dirname, "..", "components", "PrefsSlider.qml"),
@@ -400,6 +475,72 @@ assert(
     prefsPageSrc.indexOf("Theme.copyInset") !== -1,
   "PrefsPage uses Theme page title, description, margin, section spacing, and copy inset",
 );
+assert(
+  prefsPageSrc.indexOf("LayoutJs.pageContentWidth") !== -1 &&
+    prefsPageSrc.indexOf("LayoutJs.sectionColumnCount") !== -1 &&
+    prefsPageSrc.indexOf("LayoutJs.sectionColumnWidth") !== -1 &&
+    /Flow \{\s*id: sections/.test(prefsPageSrc),
+  "PrefsPage lays sections out in a Flow grid from Layout.js",
+);
+assert(
+  searchPageSrc.indexOf("Theme.contentColumnWidth(flick.width)") !== -1,
+  "SearchPage keeps a single capped column",
+);
+assert(
+  prefsPageSrc.indexOf("readonly property bool showDisclosure:") !== -1 &&
+    prefsPageSrc.indexOf("DisclosureJs.showModeToggle(root.hasAdvanced") !== -1,
+  "PrefsPage shows Simple/Everything only on pages that opted in",
+);
+assert(
+  prefsPageSrc.indexOf(
+    "visible: root.query.length === 0 && !root.embed && root.title.length > 0",
+  ) === -1,
+  "PrefsPage does not paint the mode toggle on every titled hub",
+);
+assert(
+  prefsPageSrc.indexOf("function expandChart(") !== -1 &&
+    prefsPageSrc.indexOf("function collapseChart(") !== -1 &&
+    prefsPageSrc.indexOf("readonly property bool chartOpen:") !== -1 &&
+    prefsPageSrc.indexOf("id: chartExpandLayer") !== -1 &&
+    prefsPageSrc.indexOf("anchors.fill: parent") !== -1 &&
+    prefsPageSrc.indexOf("expandable: false") !== -1,
+  "PrefsPage expands a chart over the full right-hand page",
+);
+assert(
+  prefsPageSrc.indexOf("p.atmosRightPane === true") !== -1 &&
+    prefsPageSrc.indexOf("chartExpandLayer.parent = host") !== -1,
+  "expanded chart reparents onto the Atmos right pane",
+);
+assert(
+  prefsPageSrc.indexOf("interactive: !root.embed && contentHeight > height && !root.chartOpen") !==
+    -1,
+  "PrefsPage stops scrolling while a chart is expanded",
+);
+
+const disclosureQml = fs.readFileSync(
+  path.join(__dirname, "..", "services", "Disclosure.qml"),
+  "utf8",
+);
+assert(
+  disclosureQml.indexOf("pragma Singleton") !== -1 &&
+    disclosureQml.indexOf("property bool simple: false") !== -1 &&
+    disclosureQml.indexOf("Settings") === -1 &&
+    disclosureQml.indexOf("store") === -1,
+  "Disclosure is a session singleton and is not persisted",
+);
+const qmldir = fs.readFileSync(path.join(__dirname, "..", "services", "qmldir"), "utf8");
+assert(
+  qmldir.indexOf("singleton Disclosure 1.0 Disclosure.qml") !== -1,
+  "qmldir registers the Disclosure singleton",
+);
+const chromeSrc = fs.readFileSync(path.join(__dirname, "..", "shell.qml"), "utf8");
+assert(
+  chromeSrc.indexOf("function go(path, label)") !== -1 &&
+    chromeSrc.indexOf("Disclosure.revealFromSearch(path, label)") !== -1 &&
+    chromeSrc.indexOf("Disclosure.finishReveal(hub)") !== -1 &&
+    chromeSrc.indexOf("Disclosure.leaveHub(hubId(id))") !== -1,
+  "chrome search pins the landing row and drops the pin when leaving the hub",
+);
 
 const settingRowSrc = fs.readFileSync(
   path.join(__dirname, "..", "components", "SettingRow.qml"),
@@ -410,6 +551,18 @@ assert(
     settingRowSrc.indexOf("Theme.iconStar") !== -1 &&
     settingRowSrc.indexOf("Omarchy.toggleFavorite") !== -1,
   "SettingRow stars a row through Omarchy.toggleFavorite",
+);
+assert(
+  settingRowSrc.indexOf("property bool advanced: false") !== -1 &&
+    settingRowSrc.indexOf("DisclosureJs.rowFolded") !== -1 &&
+    settingRowSrc.indexOf("shown: available && matches && !folded") !== -1,
+  "SettingRow folds through Disclosure.js so search can pin the landing row",
+);
+assert(
+  prefsGroupSrcEarly.indexOf("property bool advanced: false") !== -1 &&
+    prefsGroupSrcEarly.indexOf("DisclosureJs.groupFolded") !== -1 &&
+    prefsGroupSrcEarly.indexOf("collectPrefsRows({ includeFolded: true })") !== -1,
+  "PrefsGroup folds Advanced sections with the same Disclosure model and keeps them in section help",
 );
 assert(
   settingRowSrc.indexOf("readonly property int favoriteGutter:") !== -1 &&
@@ -502,6 +655,44 @@ assert(
   settingRowSrc.indexOf("property alias leading:") !== -1 &&
     settingRowSrc.indexOf("property bool interactive:") !== -1,
   "SettingRow can lead with a checkbox and toggle from the row",
+);
+assert(
+  settingRowSrc.indexOf("import QtQuick.Window") !== -1 &&
+    settingRowSrc.indexOf("root.Window.activeFocusItem") !== -1 &&
+    settingRowSrc.indexOf("readonly property bool focusInside:") !== -1 &&
+    settingRowSrc.indexOf("item === root") !== -1 &&
+    settingRowSrc.indexOf("item = item.parent") !== -1 &&
+    settingRowSrc.indexOf("guard < 40") !== -1,
+  "SettingRow walks Window.activeFocusItem ancestry, not root.activeFocus",
+);
+assert(
+  /readonly property bool (focusInside|keyboardHere|lit):[\s\S]{0,200}root\.activeFocus/.test(
+    settingRowSrc,
+  ) === false,
+  "SettingRow does not treat root.activeFocus as the row-lit test",
+);
+assert(
+  settingRowSrc.indexOf("visible: root.lit") !== -1 &&
+    settingRowSrc.indexOf("Theme.fill(Theme.hoverFill)") !== -1 &&
+    settingRowSrc.indexOf("z: -2") !== -1,
+  "SettingRow hover fills the whole row behind the splitter",
+);
+assert(
+  settingRowSrc.indexOf("visible: root.keyboardHere") !== -1 &&
+    settingRowSrc.indexOf("Theme.railWidth") !== -1 &&
+    settingRowSrc.indexOf("color: Theme.accent") !== -1 &&
+    settingRowSrc.indexOf("z: -1") !== -1,
+  "SettingRow paints the accent rail only when keyboard ancestry hits",
+);
+assert(
+  settingRowSrc.indexOf("Behavior on opacity") === -1 &&
+    settingRowSrc.indexOf("Theme.selectedFill") === -1,
+  "SettingRow row chrome is instant hoverFill, not a selected-fill fade",
+);
+assert(
+  settingRowSrc.indexOf("item.overlayOpen === true") !== -1 &&
+    settingRowSrc.indexOf("readonly property bool childOverlayOpen:") !== -1,
+  "SettingRow keeps the rail while a descendant overlay is open",
 );
 const collectionRowSrc = fs.readFileSync(
   path.join(__dirname, "..", "components", "CollectionRow.qml"),
@@ -601,6 +792,39 @@ assert(
     networkPageSrc.indexOf('root.navigator.go("bluetooth")') !== -1,
   "Network links to the Bluetooth hub instead of nesting it",
 );
+const hubsForSubpages = load("services/Hubs.js");
+hubsForSubpages.hubs().forEach(function (hub) {
+  const kids = hub.children || [];
+  if (!kids.length) return;
+  const src = fs.readFileSync(path.join(__dirname, "..", "pages", hub.file), "utf8");
+  const start = src.indexOf("function openSubpage(id)");
+  assert(start !== -1, hub.file + " implements openSubpage for catalog children");
+  const body = src.slice(start);
+  const stackAt = body.indexOf("if (stack)");
+  const goAt = body.indexOf('root.navigator.go("' + hub.id + '/" + id)');
+  assert(
+    stackAt !== -1 && goAt !== -1 && stackAt < goAt,
+    hub.file +
+      " opens its own subpages on the stack before navigator.go, so a deep link does not reload the hub forever",
+  );
+});
+const pagesDirForSubpages = path.join(__dirname, "..", "pages");
+fs.readdirSync(pagesDirForSubpages).forEach(function (name) {
+  if (!name.endsWith(".qml")) return;
+  const src = fs.readFileSync(path.join(pagesDirForSubpages, name), "utf8");
+  const start = src.indexOf("function openSubpage(id)");
+  if (start === -1) return;
+  const body = src.slice(start);
+  const sameHub = body.match(/root\.navigator\.go\("([a-z]+)\/" \+ id\)/);
+  if (!sameHub) return;
+  const stackAt = body.indexOf("if (stack)");
+  const goAt = body.indexOf('root.navigator.go("' + sameHub[1] + '/" + id)');
+  assert(
+    stackAt !== -1 && goAt !== -1 && stackAt < goAt,
+    name +
+      " opens its own subpages on the stack before navigator.go, so a deep link does not reload the hub forever",
+  );
+});
 const a11ySrc = fs.readFileSync(
   path.join(__dirname, "..", "pages", "AccessibilityPage.qml"),
   "utf8",
@@ -840,6 +1064,38 @@ assert(
   displaysPageSrc.indexOf('description: "No monitors reported."') !== -1,
   "a missing monitor list says No monitors reported",
 );
+assert(
+  displaysPageSrc.indexOf("root.canDisable(modelData)") !== -1 &&
+    displaysPageSrc.indexOf("This is the only display on, so it has to stay on.") !== -1 &&
+    displaysPageSrc.indexOf("Another display is mirroring this one.") !== -1,
+  "disabling the last display on, or a mirror source, stays off",
+);
+assert(
+  displaysPageSrc.indexOf("enabled: Omarchy.internalPresent") !== -1 &&
+    displaysPageSrc.indexOf("enabled: Omarchy.externalPresent") !== -1,
+  "layouts that would leave no display on stay off",
+);
+assert(
+  displaysPageSrc.indexOf('label: "Refresh rate"') !== -1 &&
+    displaysPageSrc.indexOf("RichUi.monitorResolutions(modelData)") !== -1 &&
+    displaysPageSrc.indexOf(
+      "RichUi.monitorRefreshRates(modelData, root.resolutionValue(modelData))",
+    ) !== -1 &&
+    displaysPageSrc.indexOf("RichUi.monitorModeOptions") === -1 &&
+    displaysPageSrc.indexOf("MonJs.sanitizeMode(") !== -1 &&
+    displaysPageSrc.indexOf("RichUi.monitorModeCopyText(modelData)") !== -1,
+  "resolution lists sizes only with refresh rate in its own row behind it",
+);
+const richUiSrc = fs.readFileSync(path.join(__dirname, "..", "services", "RichUi.js"), "utf8");
+assert(
+  richUiSrc.indexOf("function monitorModeOptions") === -1 &&
+    richUiSrc.indexOf("function monitorResolutions") !== -1 &&
+    richUiSrc.indexOf("function monitorRefreshRates") !== -1 &&
+    richUiSrc.indexOf("function currentMonitorResolutionValue") !== -1 &&
+    richUiSrc.indexOf("function currentMonitorRefreshValue") !== -1 &&
+    richUiSrc.indexOf("function monitorModeCopyText") !== -1,
+  "RichUi splits size and refresh and drops the combined mode picker",
+);
 const prefsCheckSrc = fs.readFileSync(
   path.join(__dirname, "..", "components", "PrefsCheck.qml"),
   "utf8",
@@ -890,6 +1146,12 @@ assert(
   "ordinary PrefsGroups are a heading and rows, not a card",
 );
 assert(
+  prefsGroupSrc.indexOf("readonly property bool prefsGroup: true") !== -1 &&
+    prefsGroupSrc.indexOf("property bool wide: false") !== -1 &&
+    prefsGroupSrc.indexOf("sectionColumnWidth") !== -1,
+  "PrefsGroup takes a page column width and can span the full row",
+);
+assert(
   /\n  spacing: Theme.headingGap\n/.test(prefsGroupSrc),
   "section headings sit close to the first row in their group",
 );
@@ -908,7 +1170,7 @@ assert(
   "the first row in a framed card has no hairline under the card edge",
 );
 assert(
-  prefsGroupSrc.indexOf("function collectPrefsRows()") !== -1 &&
+  prefsGroupSrc.indexOf("function collectPrefsRows(") !== -1 &&
     prefsGroupSrc.indexOf("kid.available === false") !== -1 &&
     prefsGroupSrc.indexOf("walk(kid)") !== -1,
   "framed split walks Repeater delegates and skips a hidden empty row",
@@ -962,6 +1224,87 @@ assert(
     navItemSrc.indexOf("Keys.onReturnPressed") !== -1,
   "sidebar hubs are keyboard-activable buttons",
 );
+assert(
+  shellSrc.indexOf("readonly property var flatNavPages:") !== -1 &&
+    shellSrc.indexOf("LayoutJs.flattenNavPages(root.groupedPages)") !== -1,
+  "flatNavPages walks groupedPages, not the unfiltered catalogue",
+);
+assert(
+  shellSrc.indexOf("typing: searchField.activeFocus") === -1,
+  "typing is not searchField.activeFocus alone",
+);
+assert(
+  shellSrc.indexOf("item instanceof TextInput") !== -1 &&
+    shellSrc.indexOf("item instanceof TextEdit") !== -1,
+  "typing watches the real focus item for text fields",
+);
+assert(
+  shellSrc.indexOf("p instanceof Popup") !== -1 &&
+    shellSrc.indexOf("keysDialog.visible") !== -1 &&
+    shellSrc.indexOf("sudoModeDialog.visible") !== -1 &&
+    shellSrc.indexOf("errorDialog.visible") !== -1,
+  "nav shortcuts stay off while a shell dialog or page-level popup is open",
+);
+assert(
+  shellSrc.indexOf("readonly property bool listKeys:") !== -1 &&
+    shellSrc.indexOf("enabled: root.listKeys") !== -1 &&
+    shellSrc.indexOf("if (root.navBusy || searchField.activeFocus) return") !== -1,
+  "list keys and type-to-search stay off for another text field or a dialog",
+);
+assert(
+  shellSrc.indexOf("function revealNavItem(") !== -1 &&
+    shellSrc.indexOf("navFlick.contentY") !== -1,
+  "placeNavHighlight scrolls the selected hub into the nav viewport",
+);
+const searchFieldSrc = shellSrc.slice(
+  shellSrc.indexOf("id: searchField"),
+  shellSrc.indexOf("id: navFlick"),
+);
+assert(
+  searchFieldSrc.indexOf("Keys.onEscapePressed") !== -1 &&
+    searchFieldSrc.indexOf("focus = false") !== -1 &&
+    searchFieldSrc.indexOf('text = ""') === -1,
+  "Escape on search blurs first and leaves the query for the next press",
+);
+assert(
+  shellSrc.indexOf("page.chartOpen") !== -1 &&
+    shellSrc.indexOf("page.collapseChart()") !== -1 &&
+    /if \(pageStack\.depth > 1\) pageStack\.pop\(\)/.test(shellSrc),
+  "Escape collapses an expanded chart before popping the stack",
+);
+assert(
+  shellSrc.indexOf("readonly property bool atmosRightPane: true") !== -1,
+  "right pane is the expand host for a full-size chart",
+);
+const keysDialogSrc = shellSrc.slice(
+  shellSrc.indexOf("id: keysDialog"),
+  shellSrc.indexOf("id: sudoModeDialog"),
+);
+assert(keysDialogSrc.indexOf("id: keysDialog") !== -1, "shortcut sheet is a PrefsDialog");
+assert(
+  keysDialogSrc.indexOf("Ctrl+F") !== -1 &&
+    keysDialogSrc.indexOf("Ctrl+/") !== -1 &&
+    keysDialogSrc.indexOf("A letter") !== -1 &&
+    keysDialogSrc.indexOf("Up  /  Down") !== -1,
+  "shortcut sheet lists type-to-search, movement, and Ctrl+/",
+);
+assert(
+  shellSrc.indexOf("function startSearch(") !== -1 &&
+    shellSrc.indexOf("searchField.insert(") !== -1 &&
+    shellSrc.indexOf("Keys.BeforeItem") !== -1,
+  "a printable key focuses search and inserts itself",
+);
+assert(
+  searchPageSrc.indexOf("property int hitIndex") !== -1 &&
+    searchPageSrc.indexOf("function activateHit(") !== -1 &&
+    searchPageSrc.indexOf("function moveHit(") !== -1 &&
+    searchPageSrc.indexOf("picked: index === root.hitIndex") !== -1,
+  "search hits move and open from the keyboard",
+);
+assert(
+  keysDialogSrc.indexOf("PrefsText") !== -1,
+  "shortcut sheet uses PrefsText like the other dialogs",
+);
 assert(shellSrc.indexOf("id: errorDialog") !== -1, "error dialog is a PrefsDialog");
 assert(shellSrc.indexOf("Omarchy.copyLastError()") !== -1, "error dialog copies lastError");
 assert(shellSrc.indexOf("Omarchy.clearLastError()") !== -1, "error dialog dismisses lastError");
@@ -970,6 +1313,11 @@ assert(
   "error dialog asks the default agent",
 );
 const omarchySrc = fs.readFileSync(path.join(__dirname, "..", "services", "Omarchy.qml"), "utf8");
+assert(
+  omarchySrc.indexOf('if (key === "laptop" && !internalPresent) return') !== -1 &&
+    omarchySrc.indexOf('if (key === "docked" && !externalPresent) return') !== -1,
+  "applyMonitorLayout refuses Laptop or Docked when that would leave no display on",
+);
 assert(omarchySrc.indexOf("function copyLastError()") !== -1, "Omarchy.copyLastError is defined");
 assert(omarchySrc.indexOf("function clearLastError()") !== -1, "Omarchy.clearLastError is defined");
 assert(
@@ -989,6 +1337,57 @@ assert(
   "failed jobs combine stdout and stderr",
 );
 assert(omarchySrc.indexOf("id: mutOut") !== -1, "mutProc keeps stdout for failure text");
+assert(
+  omarchySrc.indexOf("function runInteractive(") !== -1 &&
+    omarchySrc.indexOf("property Process interactiveProc: Process") !== -1 &&
+    omarchySrc.indexOf("prefs-interactive") !== -1 &&
+    omarchySrc.indexOf("kill 0") !== -1,
+  "interactive tools use their own Process and kill the process group on cancel",
+);
+const runInteractiveStart = omarchySrc.indexOf("function runInteractive(");
+const runInteractiveEnd = omarchySrc.indexOf("function commandFailureText(", runInteractiveStart);
+const runInteractiveBody = omarchySrc.slice(runInteractiveStart, runInteractiveEnd);
+assert(
+  runInteractiveBody.indexOf("enqueueIo") === -1 && runInteractiveBody.indexOf("mutProc") === -1,
+  "runInteractive does not hold the mut queue",
+);
+const brandingStart = omarchySrc.indexOf("function setScreensaverBranding(");
+const brandingEnd = omarchySrc.indexOf("function setTimezone(", brandingStart);
+const brandingBody = omarchySrc.slice(brandingStart, brandingEnd);
+assert(
+  brandingBody.indexOf('runInteractive(["omarchy", "branding", "screensaver"') !== -1 &&
+    brandingBody.indexOf('runInteractive(["omarchy", "branding", "about"') !== -1 &&
+    brandingBody.indexOf('runCommand(["omarchy", "branding", "screensaver", "reset"]') !== -1 &&
+    brandingBody.indexOf('runCommand(["omarchy", "branding", "about", "reset"]') !== -1,
+  "branding Choose/Edit stay off the mut queue; reset stays on it",
+);
+const captureStart = omarchySrc.indexOf("function captureScreenshot(");
+const captureEnd = omarchySrc.indexOf("function resizeWebcam(", captureStart);
+const captureBody = omarchySrc.slice(captureStart, captureEnd);
+assert(
+  captureBody.indexOf("runInteractive") !== -1 &&
+    captureBody.indexOf('kind: "screenshot"') !== -1 &&
+    captureBody.indexOf('kind: "recording"') !== -1 &&
+    captureBody.indexOf('kind: "capture-text"') !== -1 &&
+    captureBody.indexOf('kind: "capture-qr"') !== -1 &&
+    captureBody.indexOf("interactiveProc.running = false") !== -1,
+  "capture pickers stay off the mut queue; stop cancels a pending start",
+);
+assert(
+  omarchySrc.indexOf(
+    'function openBackgroundFolder() { launchDetached(["omarchy", "theme", "bg", "install"]) }',
+  ) !== -1 &&
+    omarchySrc.indexOf('function openAether() { launchDetached(["aether"]) }') !== -1 &&
+    omarchySrc.indexOf('launchDetached(["omarchy", "launch", "terminal", "herdr"])') !== -1,
+  "folder and GUI launches detach instead of holding mutProc",
+);
+assert(
+  omarchySrc.indexOf('runInteractive(["omarchy", "theme", "bg-switcher"]') !== -1 &&
+    omarchySrc.indexOf("omarchy file select") !== -1 &&
+    omarchySrc.indexOf('kind: "background-file"') !== -1 &&
+    omarchySrc.indexOf('kind: "theme-switcher"') !== -1,
+  "unused switcher helpers stay off the mut queue if a later UI wires them",
+);
 assert(
   omarchySrc.indexOf("presentationMode = on") !== -1 &&
     omarchySrc.indexOf("WorkQueue.hasQueuedKey(ioQueue, job.key)") !== -1,
@@ -1091,6 +1490,21 @@ assert(
   "background uses Choose… and boot screen uses Configure…",
 );
 assert(
+  appearanceSrc.indexOf('if (id === "theme") return') !== -1 &&
+    appearanceSrc.indexOf("stack.push(backgroundPage)") !== -1 &&
+    appearanceSrc.indexOf("stack.push(bootPage)") !== -1,
+  "Appearance ignores the theme alias and pushes background/boot on the stack",
+);
+const appearanceComp = chromeSrc.slice(
+  chromeSrc.indexOf("id: appearancePage"),
+  chromeSrc.indexOf("id: displayPage"),
+);
+assert(
+  appearanceComp.indexOf("stack: pageStack") !== -1 &&
+    appearanceComp.indexOf("navigator: prefsNavigator") !== -1,
+  "Appearance wires stack and navigator like other child-hubs",
+);
+assert(
   omarchyQml.indexOf("url = RichUi.parseGitUrl(url)") !== -1,
   "Omarchy validates theme URLs with RichUi.parseGitUrl",
 );
@@ -1103,6 +1517,44 @@ assert(
   systemSrc.indexOf('label: "Health report"') !== -1 &&
     systemSrc.indexOf('openSubpage("diagnostics")') !== -1,
   "System opens the Diagnostics child page",
+);
+assert(
+  systemSrc.indexOf('label: "Machine"') === -1 &&
+    systemSrc.indexOf('id === "machine"') !== -1 &&
+    systemSrc.indexOf('navigator.go("hardware")') !== -1 &&
+    systemSrc.indexOf("stack.push(machinePage)") === -1,
+  "System sends the old Machine page to Hardware",
+);
+assert(
+  systemSrc.indexOf('label: "History"') !== -1 &&
+    systemSrc.indexOf('openSubpage("history")') !== -1 &&
+    systemSrc.indexOf('id === "history"') !== -1 &&
+    systemSrc.indexOf("stack.push(historyPage)") !== -1,
+  "System opens the History child page when stack is set",
+);
+const historyPageSrc = fs.readFileSync(
+  path.join(__dirname, "..", "pages", "system", "HistoryPage.qml"),
+  "utf8",
+);
+assert(
+  historyPageSrc.indexOf('hubId: "system/history"') !== -1 &&
+    historyPageSrc.indexOf("Omarchy.applyHeld()") !== -1 &&
+    historyPageSrc.indexOf("Omarchy.discardHeld()") !== -1,
+  "History page applies and discards held writes",
+);
+assert(
+  !fs.existsSync(path.join(__dirname, "..", "pages", "system", "MachinePage.qml")),
+  "Machine is not a second copy of Hardware, Home, and Disks",
+);
+assert(
+  hardwarePageSrc.indexOf("PrefsUsageBar") === -1 &&
+    hardwarePageSrc.indexOf('label: "Installed"') !== -1 &&
+    hardwarePageSrc.indexOf("RichUi.formatBytes") !== -1,
+  "Hardware states fitted memory without a live usage meter",
+);
+assert(
+  driversPageSrc.indexOf('label: "BIOS"') === -1 && driversPageSrc.indexOf("updateFirmware") !== -1,
+  "Drivers updates firmware and leaves BIOS identity on Hardware",
 );
 assert(
   systemSrc.indexOf('label: "Crash capture"') === -1,
@@ -1434,6 +1886,564 @@ hubsJs.childIds().forEach(function (id) {
 });
 assert(shellSrc.indexOf("HubsJs.navPages()") !== -1, "shell pages come from Hubs.navPages");
 assert(
+  shellSrc.indexOf('currentPage: "home"') !== -1 &&
+    shellSrc.indexOf('ATMOS_PAGE") || "home"') !== -1 &&
+    shellSrc.indexOf("home: homePage") !== -1 &&
+    shellSrc.indexOf("dashboard: dashboardPage") === -1 &&
+    shellSrc.indexOf('raw === "dashboard"') !== -1 &&
+    shellSrc.indexOf("monitor: monitorPage") !== -1,
+  "shell lands on Home, registers Monitor, and sends dashboard to it",
+);
+const homePageSrc = fs.readFileSync(path.join(__dirname, "..", "pages", "HomePage.qml"), "utf8");
+assert(
+  homePageSrc.indexOf('hubId: "home"') !== -1 &&
+    homePageSrc.indexOf("LiveStatsStore") !== -1 &&
+    homePageSrc.indexOf("snapshot.sh") === -1 &&
+    homePageSrc.indexOf("Omarchy.signalProcess") !== -1,
+  "Home reads LiveStatsStore and signals through Omarchy",
+);
+assert(homePageSrc.indexOf("enqueueRead") === -1, "Home does not enqueue a snapshot");
+assert(
+  /title: "Processes"[\s\S]{0,80}wide: true/.test(homePageSrc),
+  "Home process table spans the full row in a two-column page",
+);
+const liveStoreSrc = fs.readFileSync(
+  path.join(__dirname, "..", "services", "LiveStatsStore.qml"),
+  "utf8",
+);
+assert(
+  liveStoreSrc.indexOf("Omarchy.liveStatsScript") !== -1 &&
+    liveStoreSrc.indexOf("interval: root.intervalMs") !== -1 &&
+    liveStoreSrc.indexOf("pragma Singleton") !== -1 &&
+    liveStoreSrc.indexOf("syncIntervalHolds") !== -1,
+  "LiveStatsStore polls live-stats.py on an interval",
+);
+const frameClockSrc = fs.readFileSync(
+  path.join(__dirname, "..", "services", "FrameClock.qml"),
+  "utf8",
+);
+const qmldirSrc = fs.readFileSync(path.join(__dirname, "..", "services", "qmldir"), "utf8");
+assert(
+  frameClockSrc.indexOf("pragma Singleton") !== -1 &&
+    frameClockSrc.indexOf("FrameAnimation") !== -1 &&
+    frameClockSrc.indexOf("function retain(") !== -1 &&
+    frameClockSrc.indexOf("running: root.active") !== -1 &&
+    qmldirSrc.indexOf("singleton FrameClock") !== -1,
+  "FrameClock ticks once per vsync while a live chart is on screen",
+);
+assert(
+  liveStoreSrc.indexOf("FrameClock.holds > 0") !== -1,
+  "LiveStatsStore only polls while a chart in view is holding the frame clock",
+);
+const chartViewportSrc = fs.readFileSync(
+  path.join(__dirname, "..", "components", "ChartViewport.qml"),
+  "utf8",
+);
+assert(
+  chartViewportSrc.indexOf("instanceof Flickable") !== -1 &&
+    chartViewportSrc.indexOf("ChartsJs.inViewport") !== -1 &&
+    chartViewportSrc.indexOf("FrameClock.retain()") !== -1 &&
+    chartViewportSrc.indexOf("property bool retainClock:") !== -1 &&
+    chartViewportSrc.indexOf("if (root.retainClock && root.inView)") !== -1 &&
+    chartViewportSrc.indexOf("function refresh(") !== -1 &&
+    chartViewportSrc.indexOf("property Connections targetConn:") !== -1 &&
+    chartViewportSrc.indexOf("readonly property bool inView:") === -1,
+  "ChartViewport retains the frame clock only while the chart is in the pane",
+);
+const progressSrc = fs.readFileSync(
+  path.join(__dirname, "..", "components", "PrefsProgress.qml"),
+  "utf8",
+);
+assert(
+  progressSrc.indexOf("retainClock: false") !== -1 &&
+    progressSrc.indexOf("Behavior on value") !== -1 &&
+    progressSrc.indexOf("enabled: !root.indeterminate && root.inView") !== -1,
+  "PrefsProgress skips value animation while hidden or off screen",
+);
+// poll() returns early while a sample is in flight, which is correct
+// backpressure and becomes a permanent freeze if that sample never finishes:
+// every later tick returns early and lastError is only written from onExited.
+assert(
+  liveStoreSrc.indexOf("stallTimer") !== -1 &&
+    liveStoreSrc.indexOf("root.startedAt") !== -1 &&
+    liveStoreSrc.indexOf("stallAfterMs") !== -1,
+  "LiveStatsStore times out a sample that never finishes",
+);
+assert(
+  /onExited:\s*function\s*\([^)]*\)\s*\{\s*root\.startedAt = 0/.test(liveStoreSrc),
+  "LiveStatsStore clears the in-flight stamp when a sample lands",
+);
+assert(
+  liveStoreSrc.indexOf("Math.max(15000") !== -1,
+  "LiveStatsStore floors the stall timeout so a slow sample is not killed early",
+);
+assert(
+  liveStoreSrc.indexOf("statsExpectedStop") !== -1 &&
+    liveStoreSrc.indexOf("root.statsExpectedStop = true") !== -1 &&
+    /if \(root\.statsExpectedStop\)/.test(liveStoreSrc),
+  "LiveStatsStore keeps the stall message when the kill exit fires",
+);
+const monitorPageSrc = fs.readFileSync(
+  path.join(__dirname, "..", "pages", "MonitorPage.qml"),
+  "utf8",
+);
+assert(
+  monitorPageSrc.indexOf('hubId: "monitor"') !== -1 &&
+    monitorPageSrc.indexOf("PrefsMeter") !== -1 &&
+    monitorPageSrc.indexOf("PrefsCoreBars") !== -1 &&
+    monitorPageSrc.indexOf("openSubpage") !== -1,
+  "Monitor is a live dashboard with child pages",
+);
+const chartHomes = {
+  heatmap: "monitor/CpuPage.qml",
+  ridgeline: "monitor/CpuPage.qml",
+  violin: "monitor/CpuPage.qml",
+  rose: "monitor/CpuPage.qml",
+  horizon: "monitor/MemoryPage.qml",
+  treemap: "monitor/MemoryPage.qml",
+  sankey: "monitor/MemoryPage.qml",
+  sunburst: "monitor/MemoryPage.qml",
+  icicle: "monitor/MemoryPage.qml",
+  streamgraph: "monitor/DiskPage.qml",
+  beeswarm: "monitor/TrafficPage.qml",
+  radar: "monitor/TrafficPage.qml",
+  calendar: "monitor/SensorsPage.qml",
+  waterfall: "monitor/SensorsPage.qml",
+  parallel: "monitor/ProcessesPage.qml",
+};
+const chartHomeSrc = {};
+Object.keys(chartHomes).forEach(function (kind) {
+  const rel = chartHomes[kind];
+  if (!chartHomeSrc[rel])
+    chartHomeSrc[rel] = fs.readFileSync(path.join(__dirname, "..", "pages", rel), "utf8");
+  assert(
+    chartHomeSrc[rel].indexOf('kind: "' + kind + '"') !== -1,
+    rel + " paints a " + kind + " chart",
+  );
+});
+Object.keys(chartHomes).forEach(function (kind) {
+  let homes = 0;
+  Object.keys(chartHomeSrc).forEach(function (rel) {
+    if (chartHomeSrc[rel].indexOf('kind: "' + kind + '"') !== -1) homes += 1;
+  });
+  assertEqual(homes, 1, kind + " has one Monitor page");
+});
+assert(
+  !fs.existsSync(path.join(__dirname, "..", "pages", "DashboardPage.qml")),
+  "Dashboard is not a second copy of the Monitor charts",
+);
+assert(
+  prefsPageSrc.indexOf("id: expandBlurb") !== -1 &&
+    prefsPageSrc.indexOf("id: expandLegend") !== -1 &&
+    prefsGroupSrc.indexOf("property string lede:") !== -1,
+  "an expanded chart shows a human explainer",
+);
+assert(
+  monitorPageSrc.indexOf("nowFlow.width") !== -1 && monitorPageSrc.indexOf("wide: true") !== -1,
+  "Monitor meters size from the Now flow and span the full row",
+);
+assert(
+  homePageSrc.indexOf('title: "Thermal"') !== -1 &&
+    homePageSrc.indexOf("HardwareJs.normalize") !== -1 &&
+    homePageSrc.indexOf("LiveStatsJs.gpuRows") !== -1 &&
+    homePageSrc.indexOf("LiveStatsJs.formatTemp") !== -1 &&
+    homePageSrc.indexOf("0 °C") === -1,
+  "Home lists GPUs from hardware inventory and keeps missing temps unknown",
+);
+const sparkSrc = fs.readFileSync(
+  path.join(__dirname, "..", "components", "PrefsSparkline.qml"),
+  "utf8",
+);
+assert(sparkSrc.indexOf("Canvas") !== -1, "PrefsSparkline paints on a Canvas");
+assert(
+  sparkSrc.indexOf("radius:") === -1 && sparkSrc.indexOf("shadow") === -1,
+  "PrefsSparkline does not round cards or add shadows",
+);
+assert(sparkSrc.indexOf("valuesB") !== -1, "PrefsSparkline can stroke a second series");
+const chartsSrc = fs.readFileSync(path.join(__dirname, "..", "services", "Charts.js"), "utf8");
+const prefsChartSrc = fs.readFileSync(
+  path.join(__dirname, "..", "components", "PrefsChart.qml"),
+  "utf8",
+);
+const cpuPageSrc = fs.readFileSync(
+  path.join(__dirname, "..", "pages", "monitor", "CpuPage.qml"),
+  "utf8",
+);
+const memPageSrc = fs.readFileSync(
+  path.join(__dirname, "..", "pages", "monitor", "MemoryPage.qml"),
+  "utf8",
+);
+const diskPageSrc = fs.readFileSync(
+  path.join(__dirname, "..", "pages", "monitor", "DiskPage.qml"),
+  "utf8",
+);
+const trafficPageSrc = fs.readFileSync(
+  path.join(__dirname, "..", "pages", "monitor", "TrafficPage.qml"),
+  "utf8",
+);
+const sensorsPageSrc = fs.readFileSync(
+  path.join(__dirname, "..", "pages", "monitor", "SensorsPage.qml"),
+  "utf8",
+);
+const processesPageSrc = fs.readFileSync(
+  path.join(__dirname, "..", "pages", "monitor", "ProcessesPage.qml"),
+  "utf8",
+);
+function gatesOffscreenModel(src, id) {
+  return src.indexOf("id: " + id) !== -1 && src.indexOf("if (!" + id + ".inView) return") !== -1;
+}
+assert(
+  gatesOffscreenModel(cpuPageSrc, "irqChart") &&
+    gatesOffscreenModel(cpuPageSrc, "psiChart") &&
+    gatesOffscreenModel(cpuPageSrc, "violinChart") &&
+    gatesOffscreenModel(cpuPageSrc, "roseChart") &&
+    gatesOffscreenModel(cpuPageSrc, "cpuHist") &&
+    gatesOffscreenModel(memPageSrc, "horizonChart") &&
+    gatesOffscreenModel(memPageSrc, "rssChart") &&
+    gatesOffscreenModel(memPageSrc, "sankeyChart") &&
+    gatesOffscreenModel(memPageSrc, "sunburstChart") &&
+    gatesOffscreenModel(memPageSrc, "icicleChart") &&
+    gatesOffscreenModel(diskPageSrc, "streamChart") &&
+    gatesOffscreenModel(trafficPageSrc, "beesChart") &&
+    gatesOffscreenModel(trafficPageSrc, "radarChart") &&
+    gatesOffscreenModel(sensorsPageSrc, "calendarChart") &&
+    gatesOffscreenModel(sensorsPageSrc, "waterfallChart") &&
+    gatesOffscreenModel(processesPageSrc, "parallelChart"),
+  "Monitor pages skip chart models while those charts are off screen",
+);
+const liveStatsPy = fs.readFileSync(path.join(__dirname, "..", "scripts", "live-stats.py"), "utf8");
+assert(prefsChartSrc.indexOf("qs.Ui") === -1, "PrefsChart does not import qs.Ui");
+assert(
+  prefsChartSrc.indexOf("resolvedExplainer") !== -1 &&
+    prefsChartSrc.indexOf("resolvedLegend") !== -1 &&
+    cpuPageSrc.indexOf('ChartCopy.blurb("heatmap")') !== -1,
+  "Monitor chart sections show a human explainer under the heading",
+);
+assert(
+  prefsChartSrc.indexOf("function tone(") !== -1 &&
+    prefsChartSrc.indexOf("Theme.chartSwatches") !== -1 &&
+    prefsChartSrc.indexOf("function heatTone(") !== -1 &&
+    prefsChartSrc.indexOf("Theme.heatHex") !== -1,
+  "PrefsChart paints marks from the active theme palette",
+);
+assert(
+  /readonly property color chartThemeAccent:\s*Theme\.accent/.test(prefsChartSrc) &&
+    /readonly property color chartThemeFg:\s*Theme\.foreground/.test(prefsChartSrc) &&
+    /readonly property var chartThemeSwatches:\s*Theme\.chartSwatches/.test(prefsChartSrc) &&
+    prefsChartSrc.indexOf("onChartThemeAccentChanged:") !== -1 &&
+    prefsChartSrc.indexOf("onChartThemeFgChanged:") !== -1 &&
+    prefsChartSrc.indexOf("onChartThemeSwatchesChanged:") !== -1,
+  "PrefsChart declares theme aliases so onChartTheme*Changed handlers can load",
+);
+assert(
+  prefsChartSrc.indexOf("ctx.strokeText(label, tx, ty)") !== -1 &&
+    prefsChartSrc.indexOf("fillText(label, tx, ty, maxW)") === -1 &&
+    prefsChartSrc.indexOf("Theme.foreground") !== -1 &&
+    prefsChartSrc.indexOf("Theme.labelSize") !== -1,
+  "PrefsChart legends are full-size foreground glyphs with a background halo",
+);
+assert(
+  sparkSrc.indexOf("Theme.chartSwatches") !== -1,
+  "PrefsSparkline strokes the second series from the theme palette",
+);
+assert(
+  themeQml.indexOf("property var chartSwatches:") !== -1 &&
+    themeQml.indexOf("function heatHex(") !== -1 &&
+    themeQml.indexOf("ThemeJs.chartSwatches(parsed)") !== -1,
+  "Theme exposes chart swatches and a sequential heat ramp",
+);
+assert(
+  prefsChartSrc.indexOf("function expandIntoPage(") !== -1 &&
+    prefsChartSrc.indexOf("page.expandChart(root)") !== -1 &&
+    prefsChartSrc.indexOf("property bool expandable:") !== -1 &&
+    prefsChartSrc.indexOf("root.expandIntoPage()") !== -1,
+  "PrefsChart click expands into the PrefsPage overlay",
+);
+assert(
+  prefsChartSrc.indexOf("ChartsJs.lerpScene") !== -1 &&
+    prefsChartSrc.indexOf("tweenT") !== -1 &&
+    prefsChartSrc.indexOf("ChartsJs.tweenProgress") !== -1 &&
+    prefsChartSrc.indexOf("if (!root.inView) return") !== -1 &&
+    prefsChartSrc.indexOf("NumberAnimation") === -1,
+  "PrefsChart tweens marks between samples",
+);
+assert(
+  sparkSrc.indexOf("ChartsJs.lerpSeries") !== -1 &&
+    sparkSrc.indexOf("if (!root.inView) return") !== -1 &&
+    sparkSrc.indexOf("ChartsJs.tweenProgress") !== -1,
+  "PrefsSparkline tweens series on the vsync clock",
+);
+function skipsIdleClock(src) {
+  return (
+    src.indexOf("clockFrame") === -1 &&
+    src.indexOf("enabled: root.inView && root.tween && root.tweenT < 1") !== -1 &&
+    src.indexOf("function onFrameChanged()") !== -1
+  );
+}
+const histSrc = fs.readFileSync(
+  path.join(__dirname, "..", "components", "PrefsHistogram.qml"),
+  "utf8",
+);
+const coreBarsSrc = fs.readFileSync(
+  path.join(__dirname, "..", "components", "PrefsCoreBars.qml"),
+  "utf8",
+);
+const stackedBarSrc = fs.readFileSync(
+  path.join(__dirname, "..", "components", "PrefsStackedBar.qml"),
+  "utf8",
+);
+function skipsOffscreenPaint(src) {
+  const paint = src.slice(src.indexOf("onPaint:"));
+  return (
+    src.indexOf("function paintCanvas(") !== -1 && paint.indexOf("if (!root.inView) return") !== -1
+  );
+}
+assert(
+  skipsOffscreenPaint(prefsChartSrc) &&
+    skipsOffscreenPaint(sparkSrc) &&
+    skipsOffscreenPaint(histSrc) &&
+    skipsOffscreenPaint(coreBarsSrc) &&
+    skipsOffscreenPaint(stackedBarSrc),
+  "Live chart canvases skip paint while off screen",
+);
+assert(
+  skipsIdleClock(prefsChartSrc) &&
+    skipsIdleClock(sparkSrc) &&
+    skipsIdleClock(histSrc) &&
+    skipsIdleClock(coreBarsSrc) &&
+    skipsIdleClock(stackedBarSrc),
+  "Idle charts do not bind FrameClock.frame after the tween ends",
+);
+assert(prefsChartSrc.indexOf("ChartsJs.heatmapLayout") !== -1, "PrefsChart paints heatmap cells");
+assert(
+  prefsChartSrc.indexOf("ChartsJs.treemapLayout") !== -1 &&
+    prefsChartSrc.indexOf("function handleTreemapClick(") !== -1 &&
+    prefsChartSrc.indexOf("function zoomOut(") !== -1 &&
+    prefsChartSrc.indexOf("function zoomAt(") !== -1 &&
+    prefsChartSrc.indexOf("viewPanning") !== -1 &&
+    prefsPageSrc.indexOf("function zoomOutChart(") !== -1,
+  "RSS treemap click zooms into a box and Escape zooms out",
+);
+assert(
+  prefsChartSrc.indexOf("ChartsJs.horizonLayout") !== -1,
+  "PrefsChart paints horizon fold labels",
+);
+assert(
+  prefsChartSrc.indexOf("ChartsJs.sunburstLayout") !== -1,
+  "PrefsChart paints sunburst slice labels",
+);
+assert(
+  prefsChartSrc.indexOf("item.cx") !== -1 &&
+    prefsChartSrc.indexOf("ctx.lineTo(item.x, item.y)") !== -1,
+  "PrefsChart paints radar spokes from the origin",
+);
+assert(
+  prefsChartSrc.indexOf("markR * 2") !== -1 && prefsChartSrc.indexOf("item.r > 0") !== -1,
+  "PrefsChart sizes beeswarm marks from layout radius",
+);
+assert(
+  prefsChartSrc.indexOf("ChartsJs.beeswarmLayout") !== -1 &&
+    prefsChartSrc.indexOf("scene.labels") !== -1 &&
+    chartsSrc.indexOf("function beeswarmGroupLabels") !== -1,
+  "PrefsChart paints beeswarm TCP state labels",
+);
+assert(
+  prefsChartSrc.indexOf("fillText") !== -1 &&
+    prefsChartSrc.indexOf("strokeText") !== -1 &&
+    prefsChartSrc.indexOf("item.label") !== -1 &&
+    prefsChartSrc.indexOf("Theme.labelSize") !== -1 &&
+    prefsChartSrc.indexOf("Theme.foreground") !== -1,
+  "PrefsChart paints radar and parallel axis labels",
+);
+assert(
+  prefsChartSrc.indexOf("scene.rails") !== -1 &&
+    prefsChartSrc.indexOf("ChartsJs.parallelLayout") !== -1 &&
+    chartsSrc.indexOf("function parallelRails") !== -1,
+  "PrefsChart paints parallel coordinate rails",
+);
+assert(
+  prefsChartSrc.indexOf("paintLabelGroup(ctx, scene.nodes") !== -1,
+  "PrefsChart paints sankey node labels",
+);
+assert(
+  prefsChartSrc.indexOf("paintLabelGroup(ctx, scene.wedges") !== -1,
+  "PrefsChart paints rose wedge labels",
+);
+assert(
+  prefsChartSrc.indexOf("paintLabelGroup(ctx, scene.bars") !== -1,
+  "PrefsChart paints waterfall bar labels",
+);
+assert(
+  prefsChartSrc.indexOf("paintLabelGroup(ctx, scene.violins") !== -1,
+  "PrefsChart paints violin core labels",
+);
+assert(
+  prefsChartSrc.indexOf("paintLabelGroup(ctx, scene.rects") !== -1,
+  "PrefsChart paints treemap leaf labels",
+);
+assert(
+  prefsChartSrc.indexOf("paintLabelGroup(ctx, scene.rects") !== -1 &&
+    chartsSrc.indexOf("function icicleRects") !== -1 &&
+    chartsSrc.indexOf("rect.ly = y + rowH / 2") !== -1,
+  "PrefsChart paints icicle cache labels",
+);
+assert(
+  prefsChartSrc.indexOf("ChartsJs.ridgelineLayout") !== -1 &&
+    prefsChartSrc.indexOf("scene.labels") !== -1 &&
+    chartsSrc.indexOf("function ridgelineLayout") !== -1,
+  "PrefsChart paints ridgeline series labels",
+);
+assert(
+  prefsChartSrc.indexOf("paintLabelGroup(ctx, scene.layers") !== -1 &&
+    chartsSrc.indexOf("function streamgraphLayers") !== -1,
+  "PrefsChart paints streamgraph disk labels",
+);
+assert(
+  prefsChartSrc.indexOf("ChartsJs.calendarLayout") !== -1 &&
+    prefsChartSrc.indexOf("scene.labels") !== -1 &&
+    chartsSrc.indexOf("function calendarLayout") !== -1,
+  "PrefsChart paints calendar weekday labels",
+);
+assert(
+  cpuPageSrc.indexOf('kind: "heatmap"') !== -1 &&
+    cpuPageSrc.indexOf("/proc/interrupts") !== -1 &&
+    liveStatsPy.indexOf('root("proc/interrupts")') !== -1,
+  "IRQ land heatmap is bound to /proc/interrupts",
+);
+assert(
+  cpuPageSrc.indexOf('kind: "ridgeline"') !== -1 && cpuPageSrc.indexOf("/proc/pressure") !== -1,
+  "PSI stall ridgeline is bound to /proc/pressure",
+);
+assert(
+  cpuPageSrc.indexOf('kind: "violin"') !== -1 && cpuPageSrc.indexOf("scaling_cur_freq") !== -1,
+  "core-freq violin is bound to scaling_cur_freq",
+);
+assert(
+  cpuPageSrc.indexOf('kind: "rose"') !== -1 &&
+    cpuPageSrc.indexOf("/proc/softirqs") !== -1 &&
+    liveStatsPy.indexOf('root("proc/softirqs")') !== -1,
+  "softirq Nightingale rose is bound to /proc/softirqs",
+);
+assert(
+  memPageSrc.indexOf('kind: "horizon"') !== -1 &&
+    memPageSrc.indexOf("/proc/buddyinfo") !== -1 &&
+    liveStatsPy.indexOf('root("proc/buddyinfo")') !== -1,
+  "buddy-order horizon is bound to /proc/buddyinfo",
+);
+assert(
+  memPageSrc.indexOf('kind: "treemap"') !== -1 && memPageSrc.indexOf("/proc/*/status") !== -1,
+  "process RSS treemap is bound to /proc/*/status",
+);
+assert(
+  memPageSrc.indexOf('kind: "sankey"') !== -1 && memPageSrc.indexOf("/proc/meminfo") !== -1,
+  "meminfo composition Sankey is bound to /proc/meminfo",
+);
+assert(
+  memPageSrc.indexOf('kind: "sunburst"') !== -1 &&
+    memPageSrc.indexOf("memory.current") !== -1 &&
+    liveStatsPy.indexOf("memory.current") !== -1,
+  "cgroup memory sunburst is bound to memory.current",
+);
+assert(
+  memPageSrc.indexOf('kind: "icicle"') !== -1 &&
+    memPageSrc.indexOf("/proc/slabinfo") !== -1 &&
+    liveStatsPy.indexOf('root("proc/slabinfo")') !== -1,
+  "slab cache icicle is bound to /proc/slabinfo",
+);
+assert(
+  diskPageSrc.indexOf('kind: "streamgraph"') !== -1 &&
+    diskPageSrc.indexOf("/proc/diskstats") !== -1,
+  "blockdev I/O streamgraph is bound to /proc/diskstats",
+);
+assert(
+  trafficPageSrc.indexOf('kind: "beeswarm"') !== -1 &&
+    trafficPageSrc.indexOf("/proc/net/tcp") !== -1 &&
+    liveStatsPy.indexOf("proc/net/tcp6") !== -1,
+  "TCP state beeswarm is bound to /proc/net/tcp and tcp6",
+);
+assert(
+  trafficPageSrc.indexOf('kind: "radar"') !== -1 && trafficPageSrc.indexOf("/proc/net/dev") !== -1,
+  "netdev counter radar is bound to /proc/net/dev",
+);
+assert(
+  sensorsPageSrc.indexOf('kind: "calendar"') !== -1 &&
+    sensorsPageSrc.indexOf("temp*_input") !== -1 &&
+    liveStatsPy.indexOf('name.endswith("_input")') !== -1,
+  "hwmon thermal calendar is bound to temp*_input",
+);
+assert(
+  sensorsPageSrc.indexOf('kind: "waterfall"') !== -1 &&
+    sensorsPageSrc.indexOf("energy_uj") !== -1 &&
+    liveStatsPy.indexOf("energy_uj") !== -1,
+  "RAPL energy waterfall is bound to energy_uj",
+);
+assert(
+  processesPageSrc.indexOf('kind: "parallel"') !== -1 &&
+    processesPageSrc.indexOf("/proc/*/stat") !== -1,
+  "process parallel coordinates are bound to /proc/*/stat",
+);
+assert(
+  chartsSrc.indexOf("function nightingaleWedges") !== -1 &&
+    chartsSrc.indexOf("function waterfallBars") !== -1,
+  "Charts.js ships Nightingale and waterfall geometry",
+);
+const meterSrc = fs.readFileSync(
+  path.join(__dirname, "..", "components", "PrefsMeter.qml"),
+  "utf8",
+);
+assert(
+  meterSrc.indexOf("Chamfer") === -1 &&
+    meterSrc.indexOf("radius: Theme.radius") !== -1 &&
+    meterSrc.indexOf("shadow") === -1,
+  "PrefsMeter is a hairline tile without chamfer or shadows",
+);
+assert(
+  meterSrc.indexOf("id: spark") !== -1 &&
+    meterSrc.indexOf("readonly property bool inView:") !== -1 &&
+    gatesOffscreenModel(monitorPageSrc, "cpuMeter") &&
+    gatesOffscreenModel(monitorPageSrc, "memMeter") &&
+    gatesOffscreenModel(monitorPageSrc, "netMeter") &&
+    gatesOffscreenModel(monitorPageSrc, "diskMeter") &&
+    gatesOffscreenModel(monitorPageSrc, "tempMeter") &&
+    gatesOffscreenModel(monitorPageSrc, "loadMeter"),
+  "Monitor meters skip sparkline series while those tiles are off screen",
+);
+assert(
+  gatesOffscreenModel(cpuPageSrc, "coreSpark") &&
+    cpuPageSrc.indexOf("LiveStatsJs.coreSeries") !== -1,
+  "CpuPage per-core sparklines skip series while those rows are off screen",
+);
+assert(
+  gatesOffscreenModel(homePageSrc, "cpuSpark") &&
+    gatesOffscreenModel(homePageSrc, "memSpark") &&
+    gatesOffscreenModel(homePageSrc, "netSpark") &&
+    gatesOffscreenModel(homePageSrc, "cpuTempSpark") &&
+    gatesOffscreenModel(homePageSrc, "gpuSpark") &&
+    gatesOffscreenModel(cpuPageSrc, "cpuSpark") &&
+    gatesOffscreenModel(cpuPageSrc, "loadSpark") &&
+    gatesOffscreenModel(cpuPageSrc, "coreBars") &&
+    gatesOffscreenModel(memPageSrc, "memStack") &&
+    gatesOffscreenModel(memPageSrc, "memSpark") &&
+    gatesOffscreenModel(memPageSrc, "swapSpark") &&
+    gatesOffscreenModel(trafficPageSrc, "netSpark") &&
+    gatesOffscreenModel(trafficPageSrc, "tcpStack") &&
+    gatesOffscreenModel(trafficPageSrc, "ifaceSpark") &&
+    gatesOffscreenModel(diskPageSrc, "diskSpark") &&
+    gatesOffscreenModel(sensorsPageSrc, "cpuTempSpark") &&
+    gatesOffscreenModel(sensorsPageSrc, "gpuSpark") &&
+    gatesOffscreenModel(sensorsPageSrc, "sensorSpark") &&
+    gatesOffscreenModel(monitorPageSrc, "coreBars") &&
+    gatesOffscreenModel(monitorPageSrc, "memStack"),
+  "Home, Monitor, and child-page series skip rebuilds while those charts are off screen",
+);
+assert(
+  omarchySrc.indexOf("function signalProcess(") !== -1 &&
+    omarchySrc.indexOf("ProcessesJs.signalArgv") !== -1 &&
+    omarchySrc.indexOf('refresh: "none"') !== -1,
+  "Omarchy.signalProcess runs through runCommand",
+);
+assert(omarchySrc.indexOf('ATMOS_PAGE") || "home"') !== -1, "Omarchy starts the session from Home");
+assert(
   shellSrc.indexOf('id: "appearance", title: "Appearance"') === -1,
   "shell does not inline hub titles",
 );
@@ -1477,6 +2487,9 @@ const updateStart = omarchySrc.indexOf("function updateThemes(");
 const updateEnd = omarchySrc.indexOf("function removeTheme(", updateStart);
 const updateBody = omarchySrc.slice(updateStart, updateEnd);
 assert(updateBody.indexOf('refresh: "look"') !== -1, "updateThemes refreshes look");
+const runCommandStart = omarchySrc.indexOf("function runCommand(");
+const runCommandEnd = omarchySrc.indexOf("function scriptOpts(", runCommandStart);
+const runCommandBody = omarchySrc.slice(runCommandStart, runCommandEnd);
 const runJobStart = omarchySrc.indexOf("function runJob(");
 const runJobEnd = omarchySrc.indexOf("function cancelJob(", runJobStart);
 const runJobBody = omarchySrc.slice(runJobStart, runJobEnd);
@@ -1489,6 +2502,32 @@ assert(
   "runJob honors snapshot groups through normalizeGroup",
 );
 assert(runJobBody.indexOf("opts.apply") !== -1, "runJob copies opts.apply onto the job");
+assert(
+  runCommandBody.indexOf("Preview.active") !== -1 &&
+    runCommandBody.indexOf("bypassPreview") !== -1 &&
+    runCommandBody.indexOf("holdChange") !== -1 &&
+    runCommandBody.indexOf("recordChange") !== -1,
+  "runCommand holds in Preview and records a real write",
+);
+assert(
+  omarchySrc.indexOf("HistoryJs.applyHeld(held, runCommand)") !== -1,
+  "applyHeld replays through History.js so every option is forwarded",
+);
+assert(
+  runCommandBody.indexOf("opts.stdin") !== -1 &&
+    runCommandBody.indexOf("opts.key") !== -1 &&
+    runCommandBody.indexOf("opts.apply") !== -1 &&
+    runCommandBody.indexOf("opts.refresh") !== -1 &&
+    runCommandBody.indexOf("opts.sudo") !== -1,
+  "runCommand still forwards key, apply, refresh, sudo, and stdin",
+);
+const previewQml = fs.readFileSync(path.join(__dirname, "..", "services", "Preview.qml"), "utf8");
+assert(
+  previewQml.indexOf("property bool active: false") !== -1 &&
+    previewQml.indexOf("FileView") === -1 &&
+    previewQml.indexOf("StandardPaths") === -1,
+  "Preview starts off and is not persisted",
+);
 assert(shellSrc.indexOf("inotifywait") === -1, "inotifywait is not in shell.qml");
 assert(
   omarchySrc.indexOf("syncThemeFromDiskIfStale") === -1 &&
@@ -1517,4 +2556,39 @@ const readAt = jobProcSrc.indexOf("enqueueRead", applyAt);
 assert(
   applyAt !== -1 && readAt !== -1 && applyAt < readAt,
   "jobProc calls applyWritePatch before enqueueRead",
+);
+
+assert(
+  !fs.existsSync(path.join(__dirname, "..", "scripts", "instance-lock.sh")),
+  "instance-lock.sh is gone; concurrent windows serialize on disk instead",
+);
+assert(
+  omarchySrc.indexOf("instance-lock.sh") === -1 &&
+    omarchySrc.indexOf("lostInstanceLock") === -1 &&
+    omarchySrc.indexOf("property Process instanceLock") === -1,
+  "Omarchy does not refuse a second window",
+);
+assert(
+  runCommandBody.indexOf("lostInstanceLock") === -1 &&
+    runJobBody.indexOf("lostInstanceLock") === -1,
+  "runCommand and runJob stay live in every window",
+);
+const enqueueIoStart = omarchySrc.indexOf("function enqueueIo(");
+const enqueueIoEnd = omarchySrc.indexOf("function requestSudoMode(", enqueueIoStart);
+const enqueueIoBody = omarchySrc.slice(enqueueIoStart, enqueueIoEnd);
+assert(enqueueIoBody.indexOf("lostInstanceLock") === -1, "enqueueIo stays live in every window");
+assert(
+  shellSrc.indexOf("secondInstanceDialog") === -1 &&
+    shellSrc.indexOf("lostInstanceLock") === -1 &&
+    shellSrc.indexOf("Atmos is already open") === -1,
+  "shell does not show an already-open refusal",
+);
+assert(
+  testsRun.indexOf("instance-lock.sh must stay gone") !== -1 &&
+    testsRun.indexOf("ATMOS_INSTANCE_LOCK") === -1,
+  "tests/run pins that instance-lock.sh stays gone",
+);
+assert(
+  testsRun.indexOf("bin/atmos opens every launch as its own instance") !== -1,
+  "tests/run asserts the launcher opens a window per launch",
 );

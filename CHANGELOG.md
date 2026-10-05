@@ -2,6 +2,95 @@
 
 Notable changes to Atmos. Each section is a git tag on `main` and `alpha`. Install and in-app Update follow the `alpha` branch.
 
+## [v0.0.1-alpha.24] - 2026-09-28
+
+### Changed
+
+- A letter, digit, or mark starts settings search and inserts itself, unless a text field or dialog already has the keyboard. Up and Down, and Ctrl+J and Ctrl+K, move through hubs or search hits. Home and End jump to the ends. Enter opens the highlighted hub or setting. Ctrl+/ opens the shortcut sheet.
+
+## [v0.0.1-alpha.23] - 2026-09-28
+
+### Fixed
+
+- Atmos opens again. PrefsChart declares the theme properties its change handlers attach to, so Home can load after install. ([#83](https://github.com/csfh/atmos/pull/83))
+
+### Added
+
+- The product site source lives in `site/` so Cloudflare Pages can build [atmos.csfh.dev](https://atmos.csfh.dev) from this repo. ([#84](https://github.com/csfh/atmos/pull/84))
+
+## [v0.0.1-alpha.22] - 2026-09-27
+
+### Added
+
+- Monitor child pages chart the live sample: interrupt heatmap, stall ridgelines, core-frequency violins, softirq rose, free-page horizon, process treemap, memory sankey, cgroup sunburst, slab icicle, disk streamgraph, TCP beeswarm, interface radar, temperature calendar, RAPL waterfall, and process parallel coordinates. Missing RAPL, slab, and cgroup data stays empty.
+- A chart opens over the page. The treemap focuses, pans, and zooms. Marks tween between samples and stay idle while off screen. Colors come from the theme palette. Each section says what the marks mean.
+- Display mode, scale, rotation, refresh, and the other monitor-rule writes, plus keyboard layout and turning the touchpad off, apply immediately and then revert after 12 seconds unless you press Keep. Escape reverts too. The timer stays in the window. Quitting Atmos during those 12 seconds leaves the new setting in place.
+
+### Fixed
+
+- File pickers no longer abort the window on an Omarchy session. The launcher uses the desktop-portal theme instead of GTK 3. ([#74](https://github.com/csfh/atmos/pull/74))
+- Network, Windows, Applications, and Appearance open their own subpages on the stack, so Wi-Fi, rules, startup, background, and boot do not reload the hub. ([#72](https://github.com/csfh/atmos/pull/72), [#73](https://github.com/csfh/atmos/pull/73))
+- Monitor can end a setuid helper this user started. Ownership follows the real and saved uid. ([#75](https://github.com/csfh/atmos/pull/75))
+- Older samples drop their process lists. Charts still read the scalar history. ([#76](https://github.com/csfh/atmos/pull/76))
+- A live sample that never finishes times out, and stopping it keeps the stall message. ([#78](https://github.com/csfh/atmos/pull/78))
+- A Dell charge limit stored in Adaptive mode shows as unset, and applying one switches to Custom in a single elevation. ([#80](https://github.com/csfh/atmos/pull/80))
+
+### Removed
+
+- System → Machine. Identity stays on Hardware, live load on Home and Monitor, and filesystems on Disks. `atmos system/machine` opens Hardware. Hardware shows fitted memory as a size. Drivers no longer repeats the BIOS row.
+
+## [v0.0.1-alpha.21] - 2026-09-14
+
+### Added
+
+- Wide windows lay settings sections in two columns. The default window stays a single capped column. Process tables, meters, core bars, and similar full-bleed groups keep the full row.
+
+### Fixed
+
+- Occupied workspaces past the bar count stay on the strip, matching stock Hypr/Omarchy. ([#71](https://github.com/csfh/atmos/pull/71))
+
+## [v0.0.1-alpha.20] - 2026-09-13
+
+### Added
+
+- **Monitor** hub next to Home. Overview meters cover CPU, memory, traffic, disk I/O, package temperature, and load, plus per-core bars and a stacked memory composition. Child pages: Processes (search, mine/all/kernel, state, sort, tree, CPU/RSS floors, row cap; End/Force quit after a confirm), CPU, Memory, Disk I/O, Traffic, and Sensors. Samples come from `scripts/live-stats.py` through a shared in-window poller (interval and pause on the hub). Nothing is written to disk. Home keeps the short glance and reads the same poller.
+- Home lists GPUs from hardware inventory and charts package and GPU temperatures. Missing readings stay unknown; a sysfs 0 is not shown as 0 °C. ([#70](https://github.com/csfh/atmos/pull/70), from [#63](https://github.com/csfh/atmos/pull/63)) by Taha Sadough ([@tahadx](https://github.com/tahadx)).
+- Hover **Installed themes** paints this window from that palette without committing it, matching Current theme. ([#65](https://github.com/csfh/atmos/pull/65), from [#58](https://github.com/csfh/atmos/pull/58)) by Taha Sadough ([@tahadx](https://github.com/tahadx)).
+
+### Fixed
+
+- Tweaks off/reset actually run. `set-tweaks.sh` reads the mode from `$2`. Swappiness elevates through `as-root.sh` when `/etc/sysctl.d` is not writable. Snapshot reads the XWayland zero-scaling opt-out. ([#69](https://github.com/csfh/atmos/pull/69), from [#59](https://github.com/csfh/atmos/pull/59)) by Taha Sadough ([@tahadx](https://github.com/tahadx)).
+- Optimistic apply matches the writers: night-light warmth no longer fabricates on/off, agents refresh below 30s clamps to 30, imported Kelvin stays in 3000–6500. ([#68](https://github.com/csfh/atmos/pull/68), from [#62](https://github.com/csfh/atmos/pull/62)) by Taha Sadough ([@tahadx](https://github.com/tahadx)).
+- Look and full snapshots query the live swallow options instead of leaving clamp defaults. ([#67](https://github.com/csfh/atmos/pull/67), from [#60](https://github.com/csfh/atmos/pull/60)) by Taha Sadough ([@tahadx](https://github.com/tahadx)).
+- Copy-Tip hints match the commands Atmos dispatches. Idle search no longer matches a leftover `tte` token. ([#66](https://github.com/csfh/atmos/pull/66), from [#61](https://github.com/csfh/atmos/pull/61)) by Taha Sadough ([@tahadx](https://github.com/tahadx)).
+
+## [v0.0.1-alpha.19] - 2026-09-12
+
+### Added
+
+- **Home** is the landing hub. Activity charts processor, memory, and network from a 2s `/proc` poll into in-memory sparklines (60 samples, this window only). Processes lists this user's pids; End sends SIGTERM, Force quit sends SIGKILL, both with a confirm. Pid 1, other users, and Atmos itself are refused. System → Machine stays the identity page. The poll is `scripts/live-stats.py` on the Home page, not `snapshot.sh`.
+
+## [v0.0.1-alpha.18] - 2026-09-12
+
+### Added
+
+- **History** and **Preview** on System. Every real `runCommand` write is recorded in memory for this window (command, target file, source, time; newest first; cap 200). Preview holds the write and shows the command; Apply is the only path that runs held entries, and Discard clears them. Off by default and not persisted. ([#56](https://github.com/csfh/atmos/pull/56), from [#37](https://github.com/csfh/atmos/pull/37)) by Fred Nix ([@nixfred](https://github.com/nixfred)).
+- **Machine** dashboard under System. Model, processor, graphics, load, memory, and battery from snapshot and hardware inventory already on hand. Diagnostics stays the copyable report. ([#54](https://github.com/csfh/atmos/pull/54), from [#36](https://github.com/csfh/atmos/pull/36)) by Fred Nix ([@nixfred](https://github.com/nixfred)).
+- Concurrent Atmos windows. Writers serialize with flock and atomic rename (Hypr sentinel `_patch` merge, shared `shell.json` lock, sidecar locks on env/hyprsunset/tweaks/avatar/presentation). ([#55](https://github.com/csfh/atmos/pull/55))
+- The prefs window **tiles**. Fresh seeds and the historical float seed migrate to `tile = true`; a hand-customized rule is left alone. ([#43](https://github.com/csfh/atmos/pull/43)) by Taha Sadough ([@tahadx](https://github.com/tahadx)).
+- Displays **Refresh rate** is its own picker, split from resolution. ([#57](https://github.com/csfh/atmos/pull/57), from [#41](https://github.com/csfh/atmos/pull/41)) by Taha Sadough ([@tahadx](https://github.com/tahadx)).
+- Live badges on sidebar hubs: failed units, connected Bluetooth, disabled outputs, wired/Wi-Fi, pending Omarchy/Atmos updates. Silent when there is nothing to say. ([#46](https://github.com/csfh/atmos/pull/46))
+- Keyboard-first sidebar navigation and a shortcut sheet. ([#47](https://github.com/csfh/atmos/pull/47))
+- Hover **Current theme** paints this window from that palette without committing it. ([#49](https://github.com/csfh/atmos/pull/49))
+- Each section names the config file it writes. ([#50](https://github.com/csfh/atmos/pull/50))
+- Advanced sections fold in Simple and still show up in search. ([#51](https://github.com/csfh/atmos/pull/51))
+- PrefsButton uses an Omarchy-style chamfered cut corner. ([#53](https://github.com/csfh/atmos/pull/53))
+- The whole settings row lights on hover and focus. ([#48](https://github.com/csfh/atmos/pull/48))
+
+### Fixed
+
+- Blocking pickers (file, theme) run off the mutation queue so they do not stall other writes. ([#45](https://github.com/csfh/atmos/pull/45))
+
 ## [v0.0.1-alpha.17] - 2026-09-09
 
 ### Added
@@ -21,7 +110,7 @@ Notable changes to Atmos. Each section is a git tag on `main` and `alpha`. Insta
 - The workspace count slider no longer repeats the number on the label line.
 - The bar strip follows the shown-count slider. Show names in the bar keeps its state after a count change.
 
-
+## [v0.0.1-alpha.16] - 2026-09-08
 
 ### Fixed
 
@@ -284,6 +373,13 @@ First public alpha. Standalone [Quickshell](https://quickshell.org) preferences 
 - Keyboard use on controls (tab focus and activation). File watching of Omarchy/Hyprland paths so outside changes can refresh the snapshot. Shared page routing and content-column layout.
 - MIT license. Contributions assign copyright to Christoffer Hallas ([CLA](CLA.md)).
 
+[v0.0.1-alpha.24]: https://github.com/csfh/atmos/compare/v0.0.1-alpha.23...v0.0.1-alpha.24
+[v0.0.1-alpha.23]: https://github.com/csfh/atmos/compare/v0.0.1-alpha.22...v0.0.1-alpha.23
+[v0.0.1-alpha.22]: https://github.com/csfh/atmos/compare/v0.0.1-alpha.21...v0.0.1-alpha.22
+[v0.0.1-alpha.21]: https://github.com/csfh/atmos/compare/v0.0.1-alpha.20...v0.0.1-alpha.21
+[v0.0.1-alpha.20]: https://github.com/csfh/atmos/compare/v0.0.1-alpha.19...v0.0.1-alpha.20
+[v0.0.1-alpha.19]: https://github.com/csfh/atmos/compare/v0.0.1-alpha.18...v0.0.1-alpha.19
+[v0.0.1-alpha.18]: https://github.com/csfh/atmos/compare/v0.0.1-alpha.17...v0.0.1-alpha.18
 [v0.0.1-alpha.17]: https://github.com/csfh/atmos/compare/v0.0.1-alpha.16...v0.0.1-alpha.17
 [v0.0.1-alpha.16]: https://github.com/csfh/atmos/compare/v0.0.1-alpha.15...v0.0.1-alpha.16
 [v0.0.1-alpha.15]: https://github.com/csfh/atmos/compare/v0.0.1-alpha.14...v0.0.1-alpha.15

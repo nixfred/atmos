@@ -18,17 +18,6 @@ function clampCount(raw) {
   return n;
 }
 
-function countFromItems(list) {
-  var rows = Array.isArray(list) ? list : [];
-  var max = 0;
-  var i, n;
-  for (i = 0; i < rows.length; i++) {
-    n = Number(rows[i] && (rows[i].id || rows[i].workspace));
-    if (isFinite(n) && n >= 1 && n <= 10 && n > max) max = n;
-  }
-  return max < 1 ? 10 : max;
-}
-
 function sanitizeId(raw) {
   var text = String(raw || "").replace(/^\s+|\s+$/g, "");
   if (!text) return "";
@@ -113,6 +102,48 @@ function clampShown(raw) {
   if (!isFinite(n) || n < 1) n = 5;
   if (n > 10) n = 10;
   return n;
+}
+
+function liveWorkspaceId(row) {
+  if (row && typeof row === "object") return Number(row.id || row.workspace);
+  return Number(row);
+}
+
+function liveWorkspaceOccupied(row) {
+  if (!row || typeof row !== "object") return false;
+  if (row.occupied === true) return true;
+  if (Number(row.windows) > 0) return true;
+  var tops = row.toplevels;
+  if (tops && typeof tops === "object") {
+    if (Array.isArray(tops.values) && tops.values.length > 0) return true;
+    if (Array.isArray(tops) && tops.length > 0) return true;
+  }
+  if (Number(tops) > 0) return true;
+  return false;
+}
+
+// extras-rule: always 1..count; append count+1..10 if occupied or focused.
+// Stock Omarchy appends any live Hypr id 1–10. Atmos persists 1–10, so empty
+// extras would always exist. Node fixtures use occupied / windows / toplevels;
+// the bar widget uses HyprlandWorkspace.toplevels.values.length.
+function shownIds(count, live, focusedId) {
+  var n = clampShown(count);
+  var ids = [];
+  var i;
+  for (i = 1; i <= n; i++) ids.push(i);
+  var rows = Array.isArray(live) ? live : [];
+  var focused = Number(focusedId);
+  if (!isFinite(focused)) focused = 0;
+  for (i = 0; i < rows.length; i++) {
+    var id = liveWorkspaceId(rows[i]);
+    if (!isFinite(id) || id < 1 || id > 10) continue;
+    if (ids.indexOf(id) !== -1) continue;
+    if (liveWorkspaceOccupied(rows[i]) || id === focused) ids.push(id);
+  }
+  ids.sort(function (left, right) {
+    return left - right;
+  });
+  return ids;
 }
 
 function clampState(raw) {
@@ -377,7 +408,7 @@ if (typeof module !== "undefined" && module.exports) {
     END: END,
     clampCount: clampCount,
     clampShown: clampShown,
-    countFromItems: countFromItems,
+    shownIds: shownIds,
     clampState: clampState,
     normalizeItem: normalizeItem,
     serialize: serialize,

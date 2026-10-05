@@ -10,6 +10,10 @@
 // two different times. Preview asks "what would this do" before it happens;
 // history asks "what did that do" after. Both need the command rendered as
 // something a person can read.
+//
+// History and held writes live in memory on the Omarchy singleton of this
+// window. After multi-window Atmos, each launch is its own process, so the
+// list is per-window and is not a disk audit log.
 
 var MAX_ENTRIES = 200;
 
@@ -122,4 +126,51 @@ function countsBySource(list) {
 function countFor(counts, source) {
   var c = counts || {};
   return c["s_" + String(source)] || 0;
+}
+
+// Apply must replay the original argv and every option runCommand accepted,
+// not a rendered string. Copy own enumerable fields so a later stdin,
+// payload, or callback is not silently dropped, then force bypassPreview
+// so the replay cannot re-hold itself.
+function replayOpts(opts) {
+  var o = opts && typeof opts === "object" ? opts : {};
+  var next = {};
+  var k;
+  for (k in o) {
+    if (!Object.prototype.hasOwnProperty.call(o, k)) continue;
+    if (k === "bypassPreview") continue;
+    next[k] = o[k];
+  }
+  next.bypassPreview = true;
+  return next;
+}
+
+// Held is newest-first for display. Replay oldest first so Apply is a
+// chronological run, not the reverse of what the person did.
+function applyHeld(held, run) {
+  var list = Array.isArray(held) ? held.slice() : [];
+  var i, item;
+  if (typeof run !== "function") return;
+  for (i = list.length - 1; i >= 0; i--) {
+    item = list[i];
+    if (!item) continue;
+    if (!Array.isArray(item.argv) || item.argv.length === 0) continue;
+    run(item.argv, replayOpts(item.opts));
+  }
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    MAX_ENTRIES: MAX_ENTRIES,
+    unwrap: unwrap,
+    describe: describe,
+    targetFile: targetFile,
+    entry: entry,
+    push: push,
+    relativeTime: relativeTime,
+    countsBySource: countsBySource,
+    countFor: countFor,
+    replayOpts: replayOpts,
+    applyHeld: applyHeld,
+  };
 }

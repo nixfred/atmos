@@ -18,15 +18,24 @@ QtObject {
   property color accent: "#cacccc"
   property color muted: "#707880"
   property color urgent: "#a55555"
+  property var chartSwatches: []
+  property var chartStops: []
 
   property var themeShellValues: ({})
   property var userShellValues: ({})
   property var shellValues: ({})
 
+  // In-memory copy of the live FileView chrome. Hover preview paints over
+  // Theme colors, then restorePreview puts these back. source: "live" --
+  // never a named theme directory.
+  property var livePreviewSnapshot: null
+  property bool livePreviewing: false
+
   // Visual language. Monospace, grayscale chrome, 1px hairlines, radius 0,
   // dense native controls, a capped content column, a persistent sidebar.
-  // Tokens record the live look. Do not round cards, add shadows, or grow
-  // the column because the window is wide.
+  // Tokens record the live look. Do not round cards or add shadows. A
+  // single column stays capped; a second column may open when the window
+  // and the page both have room.
 
   readonly property string fontFamily: "monospace"
   readonly property int fontSize: Math.max(9, Math.round(ThemeJs.numberToken(root.shellValues, "font.base-size", 12)))
@@ -49,21 +58,20 @@ QtObject {
   readonly property string iconStar: "star-line"
   readonly property string iconStarOn: "star-fill"
   readonly property int radius: 0
-
-  // Sidebar status badges. A step above caption so the glyph reads at a
-  // glance, which is the point of putting state in the nav rather than on
-  // the page.
-  readonly property int badgeSize: Math.max(12, fontSize + 1)
-  // Status ink. Grayscale chrome stays grayscale; only genuine state earns
-  // colour, and only these two.
-  readonly property color ok: "#6f8f6f"
-  readonly property color warn: "#b5904f"
-
-  // The chamfer. A cut corner, not a radius -- the visual language note
-  // above forbids rounding cards and this does not round them. Sized off the
-  // font so it tracks density the way pad and gap already do.
+  // A cut corner, not a radius. The visual language note above forbids
+  // rounding cards and this does not round them. Sized off the font so it
+  // tracks density the way pad and gap already do. PrefsButton uses chamferSm.
   readonly property int chamfer: Math.max(5, Math.round(fontSize * 0.62))
   readonly property int chamferSm: Math.max(3, Math.round(fontSize * 0.36))
+  readonly property int sparklineHeight: Math.max(28, Math.round(fontSize * 2.2))
+  readonly property int meterMinHeight: Math.max(92, Math.round(fontSize * 6.6))
+  readonly property int coreBarHeight: Math.max(52, Math.round(fontSize * 3.8))
+  readonly property int stackedBarHeight: Math.max(10, Math.round(fontSize * 0.75))
+  readonly property int histogramHeight: Math.max(64, Math.round(fontSize * 4.6))
+  readonly property int chartHeight: Math.max(96, Math.round(fontSize * 7))
+  // Sidebar status badges. A step above caption so the glyph reads at a
+  // glance. Status ink is Theme.urgent / Theme.muted, not a private green.
+  readonly property int badgeSize: Math.max(12, fontSize + 1)
   readonly property real normalFill: ThemeJs.numberToken(root.shellValues, "controls.normal-fill-alpha", 0.04)
   readonly property real hoverFill: ThemeJs.numberToken(root.shellValues, "controls.hover-cursor-fill-alpha", 0.08)
   readonly property real selectedFill: ThemeJs.numberToken(root.shellValues, "controls.selected-fill-alpha", 0.18)
@@ -101,7 +109,6 @@ QtObject {
   readonly property int sliderBar: 4
   readonly property int sliderHandle: 14
   readonly property int sliderTickGap: 4
-  readonly property int sliderCompactWidth: 162
   readonly property int fieldInset: 10
   readonly property int fieldWidth: 200
   readonly property int spinWidth: 108
@@ -117,6 +124,9 @@ QtObject {
 
   readonly property int sidebarWidth: 220
   readonly property int contentMaxWidth: 1000
+  readonly property int contentWideMaxWidth: 1400
+  readonly property int sectionMinColumn: 520
+  readonly property int sectionMaxColumns: 2
   readonly property int controlColumnWidth: 280
   readonly property int dialogWidth: 520
   readonly property int confirmWidth: 420
@@ -163,6 +173,12 @@ QtObject {
     accent = parsed.accent
     muted = parsed.muted
     urgent = parsed.urgent
+    chartSwatches = ThemeJs.chartSwatches(parsed)
+    chartStops = ThemeJs.chartStops(parsed)
+  }
+
+  function heatHex(t) {
+    return ThemeJs.heatHex(root.chartStops, t)
   }
 
   function mergeShell() {
@@ -197,12 +213,62 @@ QtObject {
     raw = ""
     for (i = 0; i < paths.length; i++) {
       raw = root.readPath(paths[i])
-      if (raw) {
-        root.themeShellValues = ThemeJs.parseShell(raw)
-        root.mergeShell()
-        break
-      }
+      if (raw) break
     }
+    // Always replace. A theme with no shell.toml must not keep the previous
+    // theme's font.base-size / fills, or the chrome (and an open popup) jump
+    // to leftover tokens.
+    root.themeShellValues = raw ? ThemeJs.parseShell(raw) : ({})
+    root.mergeShell()
+  }
+
+  function discardPreview() {
+    root.livePreviewSnapshot = null
+    root.livePreviewing = false
+  }
+
+  function captureLivePreview() {
+    if (root.livePreviewing) return
+    root.livePreviewSnapshot = ThemeJs.snapshotLiveTheme({
+      foreground: String(root.foreground),
+      background: String(root.background),
+      accent: String(root.accent),
+      muted: String(root.muted),
+      urgent: String(root.urgent),
+      swatches: root.chartSwatches,
+      stops: root.chartStops
+    }, root.themeShellValues)
+    root.livePreviewing = true
+  }
+
+  function restorePreview() {
+    if (!root.livePreviewing) return
+    var restored = ThemeJs.restoreLiveTheme(root.livePreviewSnapshot)
+    root.discardPreview()
+    if (!restored) return
+    root.foreground = restored.colors.foreground
+    root.background = restored.colors.background
+    root.accent = restored.colors.accent
+    root.muted = restored.colors.muted
+    root.urgent = restored.colors.urgent
+    root.chartSwatches = restored.colors.swatches && restored.colors.swatches.length
+      ? restored.colors.swatches
+      : ThemeJs.chartSwatches(restored.colors)
+    root.chartStops = restored.colors.stops && restored.colors.stops.length
+      ? restored.colors.stops
+      : ThemeJs.chartStops(restored.colors)
+    root.themeShellValues = restored.themeShellValues
+    root.mergeShell()
+  }
+
+  // Hover path. Colors.toml only -- no shell.toml, no omarchy theme set --
+  // so fontSize / rowHeight stay put and the open popup does not reflow.
+  function previewNamedTheme(name) {
+    root.captureLivePreview()
+    var raw = ThemeJs.firstThemeFile(name, "colors.toml", root.home, function(path) {
+      return root.readPath(path)
+    })
+    if (raw) root.applyColors(raw)
   }
 
   // omarchy-theme-set rm -rf's current/theme then mv's a new directory in.

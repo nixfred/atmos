@@ -14,12 +14,12 @@ PrefsPage {
   property var navigator: null
 
   function openSubpage(id) {
-    if (root.navigator && root.navigator.go) {
-      root.navigator.go("applications/" + id)
+    if (stack) {
+      if (id === "startup") stack.push(startupPage)
       return
     }
-    if (!stack) return
-    if (id === "startup") stack.push(startupPage)
+    if (root.navigator && root.navigator.go)
+      root.navigator.go("applications/" + id)
   }
 
   Component { id: startupPage; Apps.StartupPage {} }
@@ -242,6 +242,7 @@ PrefsPage {
   PrefsGroup {
     framed: true
     title: "Advanced"
+    advanced: true
     query: root.query
     detail: "Autostart writes a managed block at the end of ~/.config/hypr/autostart.lua. Lines you typed yourself stay. Remove only deletes a line Atmos added."
     hint: "~/.config/hypr/autostart.lua"

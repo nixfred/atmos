@@ -29,12 +29,14 @@ Rectangle {
   // The root stays a Rectangle so every existing anchor, size and caller is
   // untouched; it simply stops painting itself and lets Chamfer draw the
   // same fill and the same hairline in a different silhouette.
-  readonly property color bodyColor: {
+  // Writable so Behavior can tween hover and focus the way color / border
+  // did on the square rect.
+  property color bodyColor: {
     if ((mouse.containsMouse || root.activeFocus) && enabled) return Theme.fill(Theme.hoverFill)
     if (primary) return Theme.accentFill(Theme.primaryFill)
     return Theme.fill(Theme.normalFill)
   }
-  readonly property color edgeColor: {
+  property color edgeColor: {
     if (danger) return Theme.urgent
     if (primary || ((mouse.containsMouse || root.activeFocus) && enabled)) return Theme.accent
     return Theme.borderColor()
@@ -44,27 +46,26 @@ Rectangle {
   border.width: 0
   border.color: "transparent"
 
-  Chamfer {
-    anchors.fill: parent
-    z: -1
-    fillColor: root.bodyColor
-    strokeColor: root.edgeColor
-    cut: Theme.chamferSm
-  }
-
   Keys.onReturnPressed: if (enabled) root.clicked()
   Keys.onSpacePressed: if (enabled) root.clicked()
 
-  Behavior on color {
+  Behavior on bodyColor {
     ColorAnimation { duration: Theme.motionFast }
   }
-  Behavior on border.color {
+  Behavior on edgeColor {
     ColorAnimation { duration: Theme.motionFast }
   }
 
   Accessible.role: Accessible.Button
   Accessible.name: text
   Accessible.onPressAction: if (enabled) root.clicked()
+
+  Chamfer {
+    anchors.fill: parent
+    fillColor: root.bodyColor
+    strokeColor: root.edgeColor
+    cut: Theme.chamferSm
+  }
 
   Text {
     id: label

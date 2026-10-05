@@ -38,13 +38,13 @@ PrefsPage {
 
   function openSubpage(id) {
     if (id === "theme") return
-    if (root.navigator && root.navigator.go) {
-      root.navigator.go("appearance/" + id)
+    if (stack) {
+      if (id === "background") stack.push(backgroundPage)
+      else if (id === "boot") stack.push(bootPage)
       return
     }
-    if (!stack) return
-    if (id === "background") stack.push(backgroundPage)
-    else if (id === "boot") stack.push(bootPage)
+    if (root.navigator && root.navigator.go)
+      root.navigator.go("appearance/" + id)
   }
 
   function extraCountText() {
@@ -146,7 +146,7 @@ PrefsPage {
 
     SettingRow {
       label: "Current theme"
-      description: "The palette in use right now. The shell and themed apps follow this."
+      description: "The palette in use right now. The shell and themed apps follow this. Hover a name to preview its colors on this window."
       hint: "omarchy theme set"
       query: root.query
       keywords: ["appearance", "color", "style", "palette"]
@@ -155,20 +155,23 @@ PrefsPage {
         value: Omarchy.theme
         options: Omarchy.themes
         enabled: Omarchy.themes.length > 0
-        onChanged: function(value) { if (value !== Omarchy.theme) Omarchy.setTheme(value) }
+        onChanged: function(value) {
+          if (value !== Omarchy.theme) Omarchy.setTheme(value)
+          else Theme.restorePreview()
+        }
 
-        // Hover a theme and Atmos repaints in it, reverting on the way out.
-        // Atmos is the shell, so it can show you a palette instead of
-        // describing one -- a settings app that is only a client of the
-        // desktop structurally cannot do this.
-        //
-        // Deliberately in-process: applyNamedTheme recolours this window and
-        // writes nothing. Previewing by running the real theme setter would
-        // mean a system write on every pointer move, which thrashes the
-        // machine, races itself, and strands you on the wrong theme the
-        // first time a revert is missed.
+        // Hover paints this window from the named theme's colors.toml.
+        // Wallpaper, bar, terminals, and Hyprland stay put. Preview never
+        // runs omarchy theme set. Leave the list or close the popup to put
+        // the live chrome back (the in-memory snapshot from current/, not
+        // the named theme directory). Click commits through setTheme;
+        // pickValue clears hover without emitting previewed("") so that
+        // paint is not undone while Omarchy.theme is still the old name.
         onPreviewed: function(value) {
-          Theme.applyNamedTheme(value.length > 0 ? value : Omarchy.theme)
+          if (value.length > 0 && value !== Omarchy.theme)
+            Theme.previewNamedTheme(value)
+          else
+            Theme.restorePreview()
         }
       }
     }
@@ -204,6 +207,7 @@ PrefsPage {
   PrefsGroup {
     title: "Additional themes"
     query: root.query
+    wide: true
     detail: "Extra themes are git clones in ~/.config/omarchy/themes. Add clones a repository and switches to it. Update all pulls the latest commit on each one. Remove deletes a theme you installed."
     hint: "omarchy theme install"
 
@@ -219,7 +223,7 @@ PrefsPage {
     SettingRow {
       available: Omarchy.extraThemes.length > 0
       label: "Installed themes"
-      description: root.extraCountText() + " Pick one to remove, or pull the latest commit on all of them."
+      description: root.extraCountText() + " Pick one to apply or remove, or pull the latest commit on all of them. Hover a name to preview its colors on this window."
       hint: "omarchy theme extras · omarchy theme update · omarchy theme remove"
       query: root.query
       keywords: ["git", "extra", "clone", "uninstall", "delete", "pull"]
@@ -233,7 +237,21 @@ PrefsPage {
           value: root.extraToRemove
           options: Omarchy.extraThemes
           enabled: Omarchy.extraThemes.length > 0
-          onChanged: function(value) { root.extraToRemove = value }
+          onChanged: function(value) {
+            root.extraToRemove = value
+            if (value !== Omarchy.theme) Omarchy.setTheme(value)
+            else Theme.restorePreview()
+          }
+
+          // Same hover path as Current theme: colors.toml only, then
+          // restorePreview puts the live chrome back. Click still records
+          // extraToRemove for Remove… and commits through setTheme.
+          onPreviewed: function(value) {
+            if (value.length > 0 && value !== Omarchy.theme)
+              Theme.previewNamedTheme(value)
+            else
+              Theme.restorePreview()
+          }
         }
 
         Row {
@@ -370,6 +388,7 @@ PrefsPage {
 
   PrefsGroup {
     title: "Advanced"
+    advanced: true
     query: root.query
     detail: "Warmth is Kelvin. 6500 is daylight. Lower numbers go amber. This talks to hyprsunset the same way the toggle does."
 

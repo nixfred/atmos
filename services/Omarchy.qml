@@ -6,15 +6,17 @@ import "Accounts.js" as AccountsJs
 import "AtmosUpdate.js" as AtmosUpdate
 import "Diagnostics.js" as DiagnosticsJs
 import "Favorites.js" as FavoritesJs
+import "Guard.js" as GuardJs
 import "Hardware.js" as HardwareJs
-import "Hooks.js" as HooksJs
 import "History.js" as HistoryJs
+import "Hooks.js" as HooksJs
 import "Hubs.js" as HubsJs
 import "HyprPrefs.js" as HyprPrefs
 import "HyprSunset.js" as HyprSunset
 import "RichUi.js" as RichUi
 import "Settings.js" as SettingsJs
 import "NetworkPrefs.js" as NetworkPrefs
+import "Processes.js" as ProcessesJs
 import "Monitors.js" as MonitorsJs
 import "Snapshot.js" as SnapshotJs
 import "SnapshotGroups.js" as SnapshotGroups
@@ -34,7 +36,6 @@ QtObject {
   readonly property string luksChangeKeyScript: shellDir + "/scripts/luks-change-key.sh"
   readonly property string rollbackSnapshotScript: shellDir + "/scripts/rollback-snapshot.sh"
   readonly property string enterpriseWifiScript: shellDir + "/scripts/enterprise-wifi-connect.sh"
-  readonly property string listThemeImagesScript: shellDir + "/scripts/list-theme-images.sh"
   readonly property string setTimezoneScript: shellDir + "/scripts/set-timezone.sh"
   readonly property string setNtpScript: shellDir + "/scripts/set-ntp.sh"
   readonly property string setHostnameScript: shellDir + "/scripts/set-hostname.sh"
@@ -72,6 +73,8 @@ QtObject {
   readonly property string createHookScript: shellDir + "/scripts/create-hook.sh"
   readonly property string setHookSampleScript: shellDir + "/scripts/set-hook-sample.sh"
   readonly property string diagReportScript: shellDir + "/scripts/diag-report.sh"
+  readonly property string liveStatsScript: shellDir + "/scripts/live-stats.py"
+  readonly property string signalProcessScript: shellDir + "/scripts/signal-process.sh"
   readonly property string envFile: Quickshell.env("HOME") + "/.config/environment.d/10-atmos.conf"
   readonly property string presentationFile: Quickshell.env("HOME") + "/.local/state/omarchy/atmos-presentation.json"
   readonly property string favoritesFile: Quickshell.env("HOME") + "/.local/state/omarchy/atmos-favorites.json"
@@ -86,10 +89,10 @@ QtObject {
   readonly property string hostnameFile: "/etc/hostname"
   readonly property string passwdFile: "/etc/passwd"
   readonly property string groupFile: "/etc/group"
-  readonly property string faceIconFile: Quickshell.env("HOME") + "/.face.icon"
-  readonly property string faceFile: Quickshell.env("HOME") + "/.face"
   readonly property string vconsoleFile: "/etc/vconsole.conf"
   readonly property string localeConfFile: "/etc/locale.conf"
+  readonly property string gtkSettingsFile: Quickshell.env("HOME") + "/.config/gtk-4.0/settings.ini"
+  readonly property string swappinessFile: "/etc/sysctl.d/99-atmos-swappiness.conf"
   readonly property string gumStubDir: shellDir + "/scripts/stubs"
   readonly property string userShellJson: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
   readonly property string defaultShellJson: "/usr/share/omarchy/config/omarchy/shell.json"
@@ -248,6 +251,9 @@ QtObject {
   property string jobStdoutBuf: ""
   property var jobStdoutLineCb: null
   property var jobFinishedCb: null
+  property var interactiveApply: null
+  property string interactiveRefresh: "none"
+  property string interactiveKind: ""
   property var wifiQrRows: []
   property int wifiQrSize: 0
   property string wifiQrSsid: ""
@@ -496,10 +502,6 @@ QtObject {
     mutProc.running = true
   }
 
-  function startSnapshot() {
-    enqueueRead("all")
-  }
-
   function snapshotRefreshGroup(value) {
     var g = String(value || "none")
     if (g === "none" || g === "") return "none"
@@ -510,9 +512,18 @@ QtObject {
   // to record from or to hold. Hooking each page instead would mean trusting
   // every future control to remember, and the changes that got missed would
   // be exactly the ones nobody thought about -- the ones you most want when
-  // working out what broke yesterday.
+  // working out what broke yesterday. The lists stay in this window's
+  // memory: after multi-window Atmos each launch is its own process.
   property var changeHistory: []
   property var heldChanges: []
+
+  // In-memory only. If this window exits during the 12s, the new setting stays.
+  property var guardState: ({ open: false, deadline: 0, reverts: [] })
+  property double guardClock: 0
+  property bool reverting: false
+  readonly property bool guardOpen: !!(guardState && guardState.open === true)
+  readonly property int guardSeconds: GuardJs.secondsLeft(guardState, guardClock)
+  signal guardArmed()
 
   function recordChange(argv, opts) {
     var o = opts || {}
@@ -548,41 +559,49 @@ QtObject {
   }
 
   // The only path by which a held command ever runs, so "preview" cannot
-  // quietly become "apply later".
+  // quietly become "apply later". Replay copies every option the original
+  // runCommand call carried (key, apply, refresh, sudo, stdin, payload, …)
+  // and sets bypassPreview so Apply cannot re-hold itself.
   function applyHeld() {
     var held = heldChanges
     heldChanges = []
-    for (var i = 0; i < held.length; i++) {
-      if (!held[i] || !held[i].argv) continue
-      var o = held[i].opts || {}
-      // Bypass the hold, or Apply re-holds everything it just released and
-      // nothing ever runs.
-      runCommand(held[i].argv, {
-        key: o.key,
-        apply: o.apply,
-        refresh: o.refresh,
-        sudo: o.sudo,
-        bypassPreview: true
-      })
+    HistoryJs.applyHeld(held, runCommand)
+  }
+
+  function stripGuard(opts) {
+    if (!opts || !opts.guard) return opts || {}
+    var next = {}
+    var k
+    for (k in opts) {
+      if (k === "guard") continue
+      next[k] = opts[k]
     }
+    return next
   }
 
   function runCommand(argv, opts) {
     if (!(argv instanceof Array) || argv.length === 0) return
     opts = opts || {}
+    if (root.reverting) {
+      opts.bypassPreview = true
+      opts.guard = null
+    }
     // Preview stops the write and shows it instead. Held, not queued.
+    // A held write never reaches the machine, so it does not arm the bar.
     if (Preview.active === true && opts.bypassPreview !== true) {
-      holdChange(argv, opts)
+      holdChange(argv, root.stripGuard(opts))
       return
     }
-    recordChange(argv, opts)
+    recordChange(argv, root.stripGuard(opts))
     enqueueIo({
       kind: "mut",
       argv: argv,
+      stdin: opts.stdin != null ? String(opts.stdin) : "",
       key: opts.key ? String(opts.key) : "",
       apply: opts.apply && typeof opts.apply === "object" ? opts.apply : null,
       refresh: snapshotRefreshGroup(opts.refresh),
-      sudo: opts.sudo === true
+      sudo: opts.sudo === true,
+      guard: opts.guard && opts.guard.id ? opts.guard : null
     })
   }
 
@@ -621,18 +640,112 @@ QtObject {
     }
   }
 
-  function runSettingCommand(cmd, key) {
+  function runSettingCommand(cmd, key, guard) {
     if (!cmd || cmd.skip) return
-    runCommand(cmd.argv, {
+    var opts = {
       key: cmd.coalesceKey || key,
       apply: cmd.apply,
       refresh: "none",
       sudo: cmd.sudo === true
-    })
+    }
+    if (guard && guard.id) opts.guard = guard
+    runCommand(cmd.argv, opts)
   }
 
-  function dispatchSetting(key, value) {
-    runSettingCommand(SettingsJs.commandFor(key, value, snapshotData, scriptOpts()), key)
+  function dispatchSetting(key, value, guard) {
+    runSettingCommand(
+      SettingsJs.commandFor(key, value, snapshotData, scriptOpts()),
+      key,
+      root.reverting ? null : guard
+    )
+  }
+
+  function copyJson(value) {
+    try {
+      return JSON.parse(JSON.stringify(value))
+    } catch (e) {
+      return value
+    }
+  }
+
+  // Arm only once the job is on the queue. A sudo prompt that the user
+  // cancels never reaches here, so the bar does not open for a write that
+  // did not happen.
+  function rememberGuard(job) {
+    if (!job || !job.guard || !job.guard.id || root.reverting) return
+    var now = Date.now()
+    var step = GuardJs.open(root.guardState, job.guard, now)
+    job.guard = null
+    if (!step.armed) return
+    root.guardState = step.state
+    root.guardClock = now
+    root.guardArmed()
+  }
+
+  function tickGuard() {
+    var now = Date.now()
+    var step = GuardJs.tick(root.guardState, now)
+    root.guardClock = now
+    if (!step.fire || !step.fire.length) {
+      root.guardState = step.state
+      return
+    }
+    root.guardState = step.state
+    root.applyReverts(step.fire)
+  }
+
+  function keepGuard() {
+    root.guardState = GuardJs.keep(root.guardState)
+    root.guardClock = Date.now()
+  }
+
+  function revertGuard() {
+    var step = GuardJs.revert(root.guardState)
+    root.guardState = step.state
+    root.guardClock = Date.now()
+    root.applyReverts(step.fire)
+  }
+
+  function applyReverts(list) {
+    if (!list || !list.length) return
+    root.reverting = true
+    var i
+    for (i = 0; i < list.length; i++) root.dispatchRevert(list[i])
+    root.reverting = false
+  }
+
+  function dispatchRevert(desc) {
+    if (!desc || !desc.kind) return
+    if (desc.kind === "monitorRules") {
+      root.writeMonitorRules(desc.rules)
+      return
+    }
+    if (desc.kind === "monitorScale") {
+      var scale = String(desc.scale || "")
+      var n = Number(scale)
+      if (!scale || !isFinite(n) || n <= 0) return
+      root.runCommand(["omarchy", "hyprland", "monitor", "scaling", scale], {
+        key: "monitorScale",
+        apply: { monitors: SnapshotJs.patchFocusedMonitorScale(root.monitors, n) },
+        refresh: "none"
+      })
+      return
+    }
+    if (desc.kind === "keyboardLayout") {
+      root.dispatchSetting("keyboardLayout", desc.name, null)
+      return
+    }
+    if (desc.kind === "kbOverride") {
+      root.writeHyprKbOverride(desc.layouts, desc.variants, desc.groupToggle === true)
+      return
+    }
+    if (desc.kind === "touchpad") {
+      if (WorkQueue.hasQueuedKey(root.ioQueue, "touchpadEnabled")) {
+        WorkQueue.dropWriteKey(root.ioQueue, "touchpadEnabled")
+        return
+      }
+      root.dispatchSetting("touchpadEnabled", true, null)
+    }
   }
 
   function inputLuaText() {
@@ -710,6 +823,7 @@ QtObject {
       sudoPromptOpen = true
       return
     }
+    root.rememberGuard(job)
     WorkQueue.enqueueWrite(ioQueue, job)
     kickIo()
   }
@@ -733,8 +847,7 @@ QtObject {
       sudoPendingJob = null
       if (pending) {
         pending.sudo = false
-        WorkQueue.enqueueWrite(ioQueue, pending)
-        kickIo()
+        enqueueIo(pending)
       }
       return
     }
@@ -772,6 +885,25 @@ QtObject {
     jobProc.running = false
   }
 
+  // Blocking pickers and region tools (file select, slurp, theme switcher)
+  // stay off ioQueue. mutProc is a single lock; holding it while a dialog
+  // waits stalls every other setting. The wrapper is the Process so a
+  // SIGTERM can kill file-select / slurp children instead of orphaning them.
+  function runInteractive(argv, opts) {
+    if (!(argv instanceof Array) || argv.length === 0) return
+    opts = opts || {}
+    lastError = ""
+    interactiveKind = String(opts.kind || "")
+    interactiveApply = opts.apply && typeof opts.apply === "object" ? opts.apply : null
+    interactiveRefresh = snapshotRefreshGroup(opts.refresh)
+    var cmd = ["bash", "-c", "trap 'trap - INT TERM; kill 0 2>/dev/null; exit 143' INT TERM; \"$@\"", "prefs-interactive"]
+    var i
+    for (i = 0; i < argv.length; i++) cmd.push(argv[i])
+    interactiveProc.running = false
+    interactiveProc.command = cmd
+    interactiveProc.running = true
+  }
+
   function commandFailureText(err, out) {
     var e = String(err || "").replace(/^\s+|\s+$/g, "")
     var o = String(out || "").replace(/^\s+|\s+$/g, "")
@@ -794,13 +926,12 @@ QtObject {
     return false
   }
 
-  function pump() {
-    kickIo()
-  }
-
   function setTheme(name) {
     name = String(name || "")
     if (!name || name === theme) return
+    // A hover snapshot is stale once we commit. Drop it so a later
+    // restorePreview cannot paint the pre-click chrome back over this.
+    Theme.discardPreview()
     Theme.applyNamedTheme(name)
     var cmd = SettingsJs.commandFor("theme", name, snapshotData, scriptOpts())
     if (!cmd || cmd.skip) return
@@ -817,8 +948,8 @@ QtObject {
     })
   }
   function openThemeSwitcher() {
-    runCommand(["bash", "-c", "theme=$(omarchy theme switcher || true); [[ -n $theme ]] && omarchy theme set \"$theme\" >/dev/null 2>&1 &"], {
-      key: "theme",
+    runInteractive(["bash", "-c", "theme=$(omarchy theme switcher || true); [[ -n $theme ]] && omarchy theme set \"$theme\" >/dev/null 2>&1 &"], {
+      kind: "theme-switcher",
       refresh: "none"
     })
   }
@@ -868,18 +999,18 @@ QtObject {
     })
   }
   function openBackgroundSwitcher() {
-    runCommand(["omarchy", "theme", "bg-switcher"], {
-      key: "background",
+    runInteractive(["omarchy", "theme", "bg-switcher"], {
+      kind: "background-switcher",
       refresh: "all"
     })
   }
   function setBackgroundFromFile() {
-    runCommand(["bash", "-c", "path=$(omarchy file select --title \"Set background\" --extensions \"jpg jpeg png gif webp bmp\" || true); [[ -n $path ]] && omarchy theme bg set \"$path\""], {
-      key: "background",
+    runInteractive(["bash", "-c", "path=$(omarchy file select --title \"Set background\" --extensions \"jpg jpeg png gif webp bmp\" || true); [[ -n $path ]] && omarchy theme bg set \"$path\""], {
+      kind: "background-file",
       refresh: "all"
     })
   }
-  function openBackgroundFolder() { runCommand(["omarchy", "theme", "bg", "install"]) }
+  function openBackgroundFolder() { launchDetached(["omarchy", "theme", "bg", "install"]) }
   function cacheBackgrounds() { runCommand(["omarchy", "theme", "bg", "cache"]) }
   function setFont(name) {
     name = String(name || "")
@@ -905,17 +1036,22 @@ QtObject {
     if (!isFinite(n) || n <= 0) return
     var list = monitors instanceof Array ? monitors : []
     var i
+    var previous = ""
     for (i = 0; i < list.length; i++) {
       if (list[i] && list[i].focused === true) {
-        if (Number(list[i].scale) === n) return
+        if (!root.reverting && Number(list[i].scale) === n) return
+        previous = String(list[i].scale)
         break
       }
     }
-    runCommand(["omarchy", "hyprland", "monitor", "scaling", scale], {
+    var opts = {
       key: "monitorScale",
       apply: { monitors: SnapshotJs.patchFocusedMonitorScale(monitors, n) },
       refresh: "none"
-    })
+    }
+    if (!root.reverting && previous)
+      opts.guard = { id: "monitorScale", revert: { kind: "monitorScale", scale: previous } }
+    runCommand(["omarchy", "hyprland", "monitor", "scaling", scale], opts)
   }
   function setDisplayBrightness(name, percent) {
     name = String(name || "")
@@ -949,7 +1085,10 @@ QtObject {
   }
   function setTouchpad(on) {
     if (on === touchpadEnabled) return
-    dispatchSetting("touchpadEnabled", on)
+    var guard = null
+    if (on !== true)
+      guard = { id: "touchpad", revert: { kind: "touchpad" } }
+    dispatchSetting("touchpadEnabled", on === true, guard)
   }
   function setTouchscreen(on) {
     if (on === touchscreenEnabled) return
@@ -1219,7 +1358,7 @@ QtObject {
     if (!servers) return
     runJob(["bash", setDnsCustomScript, servers], "", "dns-custom")
   }
-  function openAether() { runCommand(["aether"]) }
+  function openAether() { launchDetached(["aether"]) }
 
   function setIdle(screensaver, lock) {
     var saver = Math.round(Number(screensaver)) || 0
@@ -1257,8 +1396,8 @@ QtObject {
       })
       return
     }
-    runCommand(["omarchy", "branding", "screensaver", action], {
-      key: "screensaverBranding",
+    runInteractive(["omarchy", "branding", "screensaver", action], {
+      kind: "screensaver-branding",
       refresh: "all"
     })
   }
@@ -1274,8 +1413,8 @@ QtObject {
       })
       return
     }
-    runCommand(["omarchy", "branding", "about", action], {
-      key: "aboutBranding",
+    runInteractive(["omarchy", "branding", "about", action], {
+      kind: "about-branding",
       refresh: "all"
     })
   }
@@ -1378,7 +1517,10 @@ QtObject {
     if (name.indexOf(",") !== -1) name = name.split(",")[0]
     if (!name || name === keyboardLayout) return
     if (!/^[a-z0-9]{1,8}$/.test(name)) return
-    dispatchSetting("keyboardLayout", name)
+    dispatchSetting("keyboardLayout", name, {
+      id: "keyboardLayout",
+      revert: { kind: "keyboardLayout", name: keyboardLayout }
+    })
   }
 
   function setLocale(name) {
@@ -1425,6 +1567,45 @@ QtObject {
     runCommand(["omarchy", "hyprland", "window", "tiled", "fullscreen", "toggle"])
   }
 
+  function writeHyprKbOverride(layouts, variants, groupToggle) {
+    var patch = {
+      kbLayoutOverride: String(layouts || ""),
+      kbVariantOverride: String(variants || ""),
+      kbGroupToggle: groupToggle === true
+    }
+    var input = HyprPrefs.clampInput(SnapshotJs.mergeSnapshot(hyprInput, patch))
+    input.kbLayout = input.kbLayoutOverride
+    var snap = SnapshotJs.mergeSnapshot(snapshotData, { hyprInput: input })
+    var cmds = SettingsJs.planCommands([
+      { key: "hyprInput.kbLayoutOverride", value: input.kbLayoutOverride },
+      { key: "hyprInput.kbVariantOverride", value: input.kbVariantOverride },
+      { key: "hyprInput.kbGroupToggle", value: input.kbGroupToggle }
+    ], snap, scriptOpts())
+    if (!cmds || !cmds.length || cmds[0].skip) return
+    var cmd = cmds[0]
+    var guard = null
+    if (!root.reverting) {
+      var prev = hyprInput && typeof hyprInput === "object" ? hyprInput : {}
+      guard = {
+        id: "kbOverride",
+        revert: {
+          kind: "kbOverride",
+          layouts: prev.kbLayoutOverride || "",
+          variants: prev.kbVariantOverride || "",
+          groupToggle: prev.kbGroupToggle === true
+        }
+      }
+    }
+    runCommand(cmd.argv, {
+      key: cmd.coalesceKey || "hyprInput",
+      apply: cmd.apply,
+      stdin: cmd.stdin,
+      refresh: "none",
+      sudo: cmd.sudo === true,
+      guard: guard
+    })
+  }
+
   function setHyprKbOverride(layouts, variants, groupToggle) {
     var rawLayouts = String(layouts || "").replace(/^\s+|\s+$/g, "")
     layouts = HyprPrefs.sanitizeLayoutList(layouts)
@@ -1434,12 +1615,8 @@ QtObject {
     if (rawVariants && layouts && !variants) return
     groupToggle = groupToggle === true
     var input = hyprInput && typeof hyprInput === "object" ? hyprInput : {}
-    if (layouts === input.kbLayoutOverride && variants === input.kbVariantOverride && groupToggle === input.kbGroupToggle) return
-    writeHyprInput({
-      kbLayoutOverride: layouts,
-      kbVariantOverride: variants,
-      kbGroupToggle: groupToggle
-    })
+    if (layouts === (input.kbLayoutOverride || "") && variants === (input.kbVariantOverride || "") && groupToggle === (input.kbGroupToggle === true)) return
+    writeHyprKbOverride(layouts, variants, groupToggle)
   }
   function setHyprWorkspaceGesture(on) {
     if (hyprWorkspaceGestureUnmanaged) return
@@ -1691,7 +1868,17 @@ QtObject {
     dispatchSetting("workspaces", list)
   }
   function writeMonitorRules(items) {
-    dispatchSetting("monitorRules", items)
+    var guard = null
+    if (!root.reverting) {
+      guard = {
+        id: "monitorRules",
+        revert: {
+          kind: "monitorRules",
+          rules: root.copyJson(Array.isArray(monitorRules) ? monitorRules : [])
+        }
+      }
+    }
+    dispatchSetting("monitorRules", items, guard)
   }
 
   function patchMonitorRule(output, patch) {
@@ -1774,6 +1961,10 @@ QtObject {
     var items = []
     var live = Array.isArray(monitors) ? monitors : []
     var key = String(name || "")
+    // Never write a layout that leaves no display on. The buttons already
+    // gate this; refuse here too so no other caller can zero the outputs.
+    if (key === "laptop" && !internalPresent) return
+    if (key === "docked" && !externalPresent) return
     var i
     for (i = 0; i < live.length; i++) {
       var src = live[i] || {}
@@ -1831,6 +2022,12 @@ QtObject {
   function setTweak(id, on) {
     dispatchSetting("tweaks." + String(id || ""), on === true)
   }
+  function signalProcess(pid, signal) {
+    var argv = ProcessesJs.signalArgv(pid, signal, signalProcessScript)
+    if (!argv) return
+    runCommand(argv, { key: "process:" + pid, refresh: "none" })
+  }
+
   function systemdAction(action, unit, scope) {
     var argv = ["systemctl"]
     if (scope === "user") argv.push("--user")
@@ -1874,38 +2071,6 @@ QtObject {
     runJob(["bash", diagReportScript, "agent"], header, "diag-report", { refresh: "none" })
   }
 
-  // One Atmos at a time.
-  //
-  // Quickshell already refuses a second instance of the same config path,
-  // which is why this looks solved and is not: running one copy from the
-  // install and another from a checkout opens two windows, and both write
-  // the same configuration files. Settings are shared mutable state on disk,
-  // so two writers race and the loser's change is lost silently.
-  //
-  // The lock is on the app, not the path. flock holds an exclusive lock for
-  // as long as the holder lives, so the kernel releases it if Atmos crashes
-  // -- something a lockfile holding a PID cannot promise.
-  property bool lostInstanceLock: false
-
-  readonly property string instanceLockPath: {
-    var dir = Quickshell.env("XDG_RUNTIME_DIR")
-    if (!dir) dir = "/tmp"
-    return dir + "/atmos.lock"
-  }
-
-  property Process instanceLock: Process {
-    running: true
-    // -n fails immediately rather than queueing behind the instance that
-    // already owns it. tail -f /dev/null parks cheaply and dies with us.
-    command: ["flock", "-n", root.instanceLockPath, "-c", "exec tail -f /dev/null"]
-    onExited: function (exitCode) {
-      // 1 is flock's "someone else holds it". Any other code means flock is
-      // missing or broken, and refusing to start over a missing utility
-      // would be worse than the race this prevents.
-      if (exitCode === 1) root.lostInstanceLock = true
-    }
-  }
-
   // The machine's configured coding agent, asked one question, headless.
   //
   // It is the agent the user already chose through Omarchy, reached in its
@@ -1931,6 +2096,7 @@ QtObject {
     root.agentError = ""
     root.agentSeconds = 0
     root.agentStdin = text
+    agentProc.stdinEnabled = true
     agentProc.command = ["bash", root.agentAskScript]
     agentProc.running = true
   }
@@ -2403,7 +2569,7 @@ QtObject {
     dest = String(dest || "slurp")
     if (mode !== "smart" && mode !== "region" && mode !== "windows" && mode !== "fullscreen") return
     if (dest !== "slurp" && dest !== "copy" && dest !== "save") return
-    runCommand(["omarchy", "capture", "screenshot", mode, dest])
+    runInteractive(["omarchy", "capture", "screenshot", mode, dest], { kind: "screenshot" })
   }
   function startScreenrecording(desktopAudio, microphone, webcam, webcamSize, fullscreen) {
     var argv = ["omarchy", "capture", "screenrecording"]
@@ -2414,13 +2580,15 @@ QtObject {
     var size = String(webcamSize || "medium")
     if (size !== "small" && size !== "medium" && size !== "large") size = "medium"
     if (webcam) argv.push("--webcam-size=" + size)
-    runCommand(argv, {
-      key: "recordingActive",
+    runInteractive(argv, {
+      kind: "recording",
       apply: { recordingActive: true, webcamOverlay: webcam === true },
       refresh: "none"
     })
   }
   function stopScreenrecording() {
+    if (interactiveKind === "recording" && interactiveProc.running)
+      interactiveProc.running = false
     runCommand(["omarchy", "capture", "screenrecording", "--stop-recording"], {
       key: "recordingActive",
       apply: { recordingActive: false },
@@ -2428,10 +2596,10 @@ QtObject {
     })
   }
   function captureText() {
-    runCommand(["omarchy", "capture", "text"])
+    runInteractive(["omarchy", "capture", "text"], { kind: "capture-text" })
   }
   function captureQr() {
-    runCommand(["omarchy", "capture", "qr"])
+    runInteractive(["omarchy", "capture", "qr"], { kind: "capture-qr" })
   }
   function resizeWebcam(action) {
     action = String(action || "")
@@ -2458,13 +2626,13 @@ QtObject {
     path = String(path || "")
     if (path.length > 0) {
       if (path.charAt(0) !== "/" || path.indexOf("..") !== -1) return
-      runCommand(["omarchy", "tailscale", "send", machine, path])
+      runInteractive(["omarchy", "tailscale", "send", machine, path], { kind: "tailscale-send" })
       return
     }
-    runCommand(["omarchy", "tailscale", "send", machine])
+    runInteractive(["omarchy", "tailscale", "send", machine], { kind: "tailscale-send" })
   }
   function tailscaleReceive() {
-    runCommand(["omarchy", "tailscale", "receive", "--once"])
+    runInteractive(["omarchy", "tailscale", "receive", "--once"], { kind: "tailscale-receive" })
   }
 
   function runSoftware(argv, kind) {
@@ -2603,7 +2771,7 @@ QtObject {
 
   function launchHerdr() {
     if (!(extras && extras.herdr === true)) return
-    runCommand(["omarchy", "launch", "terminal", "herdr"])
+    launchDetached(["omarchy", "launch", "terminal", "herdr"])
   }
 
   function setNightlightSchedule(day, night, nightOn) {
@@ -2665,23 +2833,6 @@ QtObject {
     for (var i = 0; i < cur.length; i++) {
       if (cur[i].command === command) {
         next.push({ command: cur[i].command, delay: cur[i].delay, enabled: on !== false })
-        found = true
-      } else next.push(cur[i])
-    }
-    if (!found) return
-    writeAutostart(next)
-  }
-  function setAutostartDelay(command, delay) {
-    command = String(command || "")
-    var n = Math.round(Number(delay || 0))
-    if (!isFinite(n) || n < 0) n = 0
-    if (n > 600) n = 600
-    var cur = managedAutostart()
-    var next = []
-    var found = false
-    for (var i = 0; i < cur.length; i++) {
-      if (cur[i].command === command) {
-        next.push({ command: cur[i].command, delay: n, enabled: cur[i].enabled })
         found = true
       } else next.push(cur[i])
     }
@@ -2887,7 +3038,7 @@ QtObject {
   Component.onCompleted: {
     SnapshotGroups.setSnapshotGroupForHub(HubsJs.snapshotGroupForHub)
     Theme.currentThemeSwapped.connect(root.applyThemeNameFromFile)
-    startSession(Quickshell.env("ATMOS_PAGE") || "appearance")
+    startSession(Quickshell.env("ATMOS_PAGE") || "home")
   }
 
   readonly property var watchSpecs: SnapshotGroups.watchSpecs({
@@ -2934,7 +3085,9 @@ QtObject {
     localtimeFile: localtimeFile,
     vconsoleFile: vconsoleFile,
     localeConfFile: localeConfFile,
-    pacmanConfFile: pacmanConfFile
+    pacmanConfFile: pacmanConfFile,
+    gtkSettingsFile: gtkSettingsFile,
+    swappinessFile: swappinessFile
   })
 
   function applyThemeNameFromFile(slug) {
@@ -3042,6 +3195,38 @@ QtObject {
     onFileChanged: reload()
   }
 
+  property Process interactiveProc: Process {
+    command: ["true"]
+    stdout: StdioCollector {
+      id: interactiveOut
+      waitForEnd: true
+    }
+    stderr: StdioCollector {
+      id: interactiveErr
+      waitForEnd: true
+    }
+    onExited: function(exitCode) {
+      var apply = root.interactiveApply
+      var refresh = root.interactiveRefresh
+      root.interactiveKind = ""
+      root.interactiveApply = null
+      root.interactiveRefresh = "none"
+      if (exitCode === 143) return
+      if (exitCode !== 0) {
+        var msg = root.commandFailureText(interactiveErr.text, interactiveOut.text)
+        if (!msg) return
+        if (root.stderrLooksLikeFailure(msg))
+          root.lastError = msg
+        else
+          root.lastError = ""
+        return
+      }
+      if (apply) root.applyWritePatch({ apply: apply, key: "" })
+      if (refresh && refresh !== "none")
+        root.scheduleRefresh(refresh)
+    }
+  }
+
   property Process mutProc: Process {
     command: ["true"]
     stdout: StdioCollector {
@@ -3113,6 +3298,7 @@ QtObject {
           root.sudoPendingJob = null
           if (pending) {
             pending.sudo = false
+            root.rememberGuard(pending)
             WorkQueue.enqueueWrite(root.ioQueue, pending)
           }
         } else {

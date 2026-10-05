@@ -1,7 +1,7 @@
 // Hub identity for nav, search, launcher, and snapshot groups.
 // QML and Node both eval this file.
 
-var LAUNCHER_ALIASES = ["theme", "gpu", "cpu", "npu", "machine"];
+var LAUNCHER_ALIASES = ["theme", "gpu", "cpu", "npu"];
 
 function uniqueWords(list) {
   var out = [];
@@ -44,6 +44,41 @@ function hubs() {
       file: "AskPage.qml",
       keywords: keywordList("ask question help find search natural language plain words assistant"),
       children: [],
+    },
+    {
+      id: "home",
+      title: "Home",
+      description: "Live load, memory, temperatures, network, and this user's processes.",
+      navGroup: "home",
+      snapshotGroup: "look",
+      icon: "dashboard-line",
+      file: "HomePage.qml",
+      keywords: keywordList(
+        "dashboard home cpu memory ram network bandwidth process pid kill sparkline chart graph load activity thermal temperature gpu heat",
+        ["dashboard", "cpu", "process"],
+      ),
+      children: [],
+    },
+    {
+      id: "monitor",
+      title: "Monitor",
+      description: "Live cores, memory, disk I/O, traffic, sensors, and a full process table.",
+      navGroup: "home",
+      snapshotGroup: "look",
+      icon: "pulse-line",
+      file: "MonitorPage.qml",
+      keywords: keywordList(
+        "monitor htop btop top activity process pid kill cpu core load memory ram swap disk io traffic bandwidth sensor thermal temperature gpu psi stall sparkline histogram",
+        ["monitor", "process", "htop"],
+      ),
+      children: [
+        child("monitor/processes", "Processes", "monitor/ProcessesPage.qml"),
+        child("monitor/cpu", "CPU", "monitor/CpuPage.qml"),
+        child("monitor/memory", "Memory", "monitor/MemoryPage.qml"),
+        child("monitor/disk", "Disk I/O", "monitor/DiskPage.qml"),
+        child("monitor/traffic", "Traffic", "monitor/TrafficPage.qml"),
+        child("monitor/sensors", "Sensors", "monitor/SensorsPage.qml"),
+      ],
     },
     {
       id: "favorites",
@@ -393,14 +428,13 @@ function hubs() {
       icon: "settings-3-line",
       file: "SystemPage.qml",
       keywords: keywordList(
-        "crash capture diagnostics coredump weather location city forecast coordinates latitude longitude gps units celsius fahrenheit metric imperial refresh interval about logo branding fastfetch timezone tz utc region city date time zoneinfo timedatectl hostname computer machine device name hostnamectl keyboard layout keymap xkb qwerty language input localectl ntp timesync synchronize automatic clock network time locale lang utf-8 i18n translation pacman parallel downloads packages mirrors aur update channel orphan prune version printer cups print restore hyprland shell restart atmos git pull reset sentinel overrides report journal systemd portal pipewire kernel environment path editor shell",
-        ["hostname", "locale", "update", "diagnostics", "kernel", "uki"],
+        "crash capture diagnostics coredump weather location city forecast coordinates latitude longitude gps units celsius fahrenheit metric imperial refresh interval about logo branding fastfetch timezone tz utc region city date time zoneinfo timedatectl hostname computer machine device name hostnamectl keyboard layout keymap xkb qwerty language input localectl ntp timesync synchronize automatic clock network time locale lang utf-8 i18n translation pacman parallel downloads packages mirrors aur update channel orphan prune version printer cups print restore hyprland shell restart atmos git pull reset sentinel overrides report journal systemd portal pipewire kernel environment path editor shell history preview audit undo changes",
+        ["hostname", "locale", "update", "diagnostics", "kernel", "uki", "machine", "history"],
       ),
       children: [
-        child("system/history", "History", "system/HistoryPage.qml"),
-        child("system/machine", "Machine", "system/MachinePage.qml"),
         child("system/environment", "Environment", "system/EnvironmentPage.qml"),
         child("system/kernel", "Kernel", "system/KernelPage.qml"),
+        child("system/history", "History", "system/HistoryPage.qml"),
         child("system/diagnostics", "Diagnostics", "system/DiagnosticsPage.qml"),
       ],
     },
@@ -530,6 +564,7 @@ function fileHub(rel) {
   if (base.indexOf("windows/") === 0) return "windows";
   if (base.indexOf("applications/") === 0) return "applications";
   if (base.indexOf("system/") === 0) return "system";
+  if (base.indexOf("monitor/") === 0) return "monitor";
   return "";
 }
 

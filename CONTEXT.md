@@ -30,6 +30,8 @@
 
 **ATMOS_SKIP_HYPR** — Shell env that skips Hypr writes. Lives in `atmos-env.sh` / `apply-settings.sh`, not in JS.
 
+**Writer lock** — Concurrent Atmos windows serialize on disk. `hypr-sentinel.py` takes a per-destination flock sidecar, merges `_patch` onto the on-disk block, and publishes with atomic rename. `set-idle.sh` / `set-bar-widget.sh` / `set-workspace-bar.sh` share `shell.json.atmos.lock`. Remaining writers (`set-env.sh`, `set-hyprsunset.sh`, `set-nightlight-temp.sh`, `set-presentation.sh`, `set-tweaks.sh`, `set-avatar.sh`) lock and publish atomically. Watchers on `gtkSettingsFile` / `swappinessFile` and a second `envFile`→rest watch keep open windows in sync.
+
 **Look payload** — A snapshot (or `job.apply`) whose group is `look`. Not the Appearance hub.
 
 **job.apply** — Optional object on an enqueueIo job (`kind` `mut` or `job`). `mutProc` and `jobProc` adopt it on success as an object (no JSON round-trip through the Emit parser), then enqueue the job's refresh group.

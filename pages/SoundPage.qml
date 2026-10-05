@@ -106,7 +106,7 @@ PrefsPage {
       stretchControl: true
       label: "Capture volume"
       description: Omarchy.audioInputMuted ? "The microphone is muted. Drag the slider to unmute and set a level." : "How loud the default microphone is."
-      hint: "wpctl set-volume @DEFAULT_AUDIO_SOURCE@"
+      hint: "omarchy audio input volume"
       query: root.query
       keywords: ["mic", "microphone", "capture", "gain"]
 
@@ -202,6 +202,7 @@ PrefsPage {
 
   PrefsGroup {
     title: "Advanced"
+    advanced: true
     query: root.query
     detail: "Voxtype is Omarchy's dictation tool. Install pulls the package and a model. Hold F9 after it is ready."
 

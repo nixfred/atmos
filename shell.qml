@@ -8,8 +8,9 @@ import "services"
 import "services/Accounts.js" as AccountsJs
 import "services/Hubs.js" as HubsJs
 import "services/Layout.js" as LayoutJs
-import "services/RichUi.js" as RichUi
 import "services/NavStatus.js" as NavStatusJs
+import "services/RichUi.js" as RichUi
+import "services/Systemd.js" as SystemdJs
 import "components"
 import "pages"
 import "pages/windows" as Win
@@ -18,8 +19,8 @@ import "pages/network" as Net
 ShellRoot {
   id: root
 
-  property string launchPath: Quickshell.env("ATMOS_PAGE") || "appearance"
-  property string currentPage: "appearance"
+  property string launchPath: Quickshell.env("ATMOS_PAGE") || "home"
+  property string currentPage: "home"
   property string query: ""
   onQueryChanged: if (query.length > 0) placeNavHighlight(null)
 
@@ -28,8 +29,9 @@ ShellRoot {
 
   readonly property var pages: HubsJs.navPages()
 
-  // The only state the sidebar badges read, bound once here so a change
-  // re-evaluates one object rather than every nav row independently.
+  // Fields the sidebar badges read, boxed so the binding list lives in
+  // one place. A change still re-runs forHub on every row; that is cheap
+  // at this size.
   readonly property var navState: ({
     ready: Omarchy.snapshotReady,
     systemdUnits: Omarchy.systemdUnits,
@@ -37,9 +39,9 @@ ShellRoot {
     monitors: Omarchy.monitors,
     netKind: Omarchy.netKind,
     netSsid: Omarchy.netSsid,
-    disks: Omarchy.disks,
     updateAvailable: Omarchy.updateAvailable,
-    atmosUpdateAvailable: Omarchy.atmosUpdateAvailable
+    atmosUpdateAvailable: Omarchy.atmosUpdateAvailable,
+    isFailed: SystemdJs.isFailed
   })
 
   readonly property var groupedPages: {
@@ -53,41 +55,116 @@ ShellRoot {
     return LayoutJs.clusterByGroup(matched, q.length === 0)
   }
 
-  // The nav in the order it is drawn, so j/k walk what the eye sees rather
-  // than the unfiltered catalogue. Follows the live search filter.
-  readonly property var flatNavPages: {
-    var out = []
-    var groups = root.groupedPages
-    var i, j
-    for (i = 0; i < groups.length; i++) {
-      var pages = groups[i] && groups[i].pages ? groups[i].pages : []
-      for (j = 0; j < pages.length; j++) out.push(pages[j].id)
-    }
-    return out
-  }
+  // The nav in the order it is drawn. Follows the live search filter.
+  readonly property var flatNavPages: LayoutJs.flattenNavPages(root.groupedPages)
 
   // True while a text field owns the keyboard, so a plain letter types
-  // instead of navigating. Without this, j in the search box moves the nav
-  // and search becomes unusable.
-  readonly property bool typing: searchField.activeFocus
+  // instead of starting a search. Window shortcuts still fire when a
+  // PrefsField, PrefsPassword, PrefsSelect filter, or the sudo box has
+  // focus, so this watches the real focus item.
+  readonly property bool typing: {
+    var item = window.activeFocusItem
+    return !!(item && (item instanceof TextInput || item instanceof TextEdit))
+  }
+
+  // Up, Down, Home, End, and Enter move the sidebar or the search hits.
+  // They stay live while the search field itself is focused. A slider,
+  // button, or other text field keeps the key.
+  readonly property bool listKeys: {
+    if (modalOpen) return false
+    if (searchField.activeFocus) return true
+    if (typing) return false
+    var item = window.activeFocusItem
+    return !item || item === window.contentItem
+  }
+
+  // Page-level PrefsDialogs (add binding, LUKS, …) never appear as ids here.
+  // Walk the focus parent chain so a j cannot change hub under a modal or
+  // while a key-grab is listening.
+  function focusIsUnderPopup(item) {
+    var p = item
+    while (p) {
+      if (p instanceof Popup) return true
+      p = p.parent
+    }
+    return false
+  }
+
+  readonly property bool modalOpen: errorDialog.visible
+    || sudoModeDialog.visible
+    || keysDialog.visible
+    || focusIsUnderPopup(window.activeFocusItem)
+
+  readonly property bool navBusy: typing || modalOpen
+
+  function searchPageItem() {
+    var page = pageStack.currentItem
+    return page && page.searchPane === true ? page : null
+  }
+
+  function moveList(delta) {
+    var page = root.searchPageItem()
+    if (root.query.length > 0 && page && page.moveHit) {
+      page.moveHit(delta)
+      return
+    }
+    root.moveNav(delta)
+  }
+
+  function jumpList(toEnd) {
+    var page = root.searchPageItem()
+    if (root.query.length > 0 && page && page.jumpHit) {
+      page.jumpHit(toEnd)
+      return
+    }
+    root.jumpNav(toEnd)
+  }
+
+  function activateList() {
+    var page = root.searchPageItem()
+    if (root.query.length > 0 && page && page.activateHit) {
+      page.activateHit()
+      return
+    }
+    if (root.query.length === 0)
+      root.loadHub(root.currentPage)
+  }
+
+  // A printable key focuses search and inserts itself. The field then
+  // owns the rest of the word. Space does not start an empty query.
+  function startSearch(event) {
+    if (!event) return
+    event.accepted = false
+    if (event.isAutoRepeat) return
+    if (root.navBusy || searchField.activeFocus) return
+    var mods = event.modifiers
+    if (mods & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) return
+    var text = event.text || ""
+    if (text.length !== 1) return
+    var code = text.charCodeAt(0)
+    if (code <= 31 || code === 127) return
+    if (text === " " && searchField.text.length === 0) return
+    searchField.forceActiveFocus()
+    searchField.insert(searchField.length, text)
+    event.accepted = true
+  }
 
   function moveNav(delta) {
     var list = root.flatNavPages
-    if (list.length === 0) return
-    var at = list.indexOf(root.currentPage)
-    var next = at < 0 ? (delta > 0 ? 0 : list.length - 1) : at + delta
-    if (next < 0) next = 0
-    if (next > list.length - 1) next = list.length - 1
-    if (list[next] === root.currentPage) return
-    root.currentPage = list[next]
+    var next = LayoutJs.stepNavIndex(list, root.currentPage, delta)
+    if (next < 0) return
+    var id = list[next]
+    if (id === root.currentPage) return
+    root.currentPage = id
     if (searchField.text.length > 0) searchField.text = ""
-    else root.loadHub(list[next])
+    else root.loadHub(id)
   }
 
   function jumpNav(toEnd) {
     var list = root.flatNavPages
-    if (list.length === 0) return
-    var id = toEnd ? list[list.length - 1] : list[0]
+    var next = LayoutJs.jumpNavIndex(list, toEnd)
+    if (next < 0) return
+    var id = list[next]
     if (id === root.currentPage) return
     root.currentPage = id
     if (searchField.text.length > 0) searchField.text = ""
@@ -103,7 +180,15 @@ ShellRoot {
   }
 
   function pageComponent(id) {
-    return pageById[id] || appearancePage
+    return pageById[root.hubId(root.canonicalHub(id))] || homePage
+  }
+
+  // The chart grid used to be its own hub. Old launchers still say dashboard.
+  function canonicalHub(id) {
+    var raw = String(id || "")
+    if (raw === "dashboard" || raw.indexOf("dashboard/") === 0) return "monitor"
+    if (raw === "machine" || raw === "system/machine") return "hardware"
+    return raw
   }
 
   function hubId(id) {
@@ -119,6 +204,8 @@ ShellRoot {
   }
 
   function loadHub(id) {
+    id = root.canonicalHub(id)
+    Disclosure.leaveHub(hubId(id))
     currentPage = id
     if (pageStack.depth > 0)
       pageStack.clear(StackView.Immediate)
@@ -138,15 +225,35 @@ ShellRoot {
     navHighlight.y = pos.y
     navHighlight.visible = true
     if (!slide) highlightSlide.enabled = true
+    root.revealNavItem(item)
+  }
+
+  // Home, End, and a held Down select rows below the fold. Keep the
+  // current hub in the nav viewport.
+  function revealNavItem(item) {
+    if (!item || !navFlick) return
+    var pos = item.mapToItem(navContent, 0, 0)
+    if (pos.y !== pos.y) return
+    var top = pos.y
+    var bottom = top + item.height
+    var viewH = navFlick.height
+    var maxY = Math.max(0, navFlick.contentHeight - viewH)
+    var y = navFlick.contentY
+    if (top < y)
+      navFlick.contentY = Math.max(0, Math.min(maxY, top))
+    else if (bottom > y + viewH)
+      navFlick.contentY = Math.max(0, Math.min(maxY, bottom - viewH))
   }
 
   function openPage(id) {
     if (searchField.text.length > 0)
       searchField.text = ""
+    id = root.canonicalHub(id)
     var hub = hubId(id)
     var sub = subId(id)
     for (var i = 0; i < pages.length; i++) {
       if (pages[i].id === hub) {
+        Disclosure.finishReveal(hub)
         loadHub(hub)
         window.visible = true
         window.minimized = false
@@ -159,6 +266,7 @@ ShellRoot {
         return "ok"
       }
     }
+    Disclosure.finishReveal("")
     return "unknown"
   }
 
@@ -175,7 +283,9 @@ ShellRoot {
 
   QtObject {
     id: prefsNavigator
-    function go(path) {
+    function go(path, label) {
+      if (label)
+        Disclosure.revealFromSearch(path, label)
       searchField.text = ""
       Qt.callLater(function() { root.openPage(path) })
     }
@@ -198,7 +308,6 @@ ShellRoot {
       root.loadHub(root.currentPage)
   }
 
-  Component { id: favoritesPage; FavoritesPage { query: root.query; navigator: prefsNavigator } }
   Component {
     id: askPage
     AskPage {
@@ -211,7 +320,10 @@ ShellRoot {
     }
   }
 
-  Component { id: appearancePage; AppearancePage { query: root.query; stack: pageStack } }
+  Component { id: homePage; HomePage { query: root.query; navigator: prefsNavigator } }
+  Component { id: monitorPage; MonitorPage { query: root.query; stack: pageStack; navigator: prefsNavigator } }
+  Component { id: favoritesPage; FavoritesPage { query: root.query; navigator: prefsNavigator } }
+  Component { id: appearancePage; AppearancePage { query: root.query; stack: pageStack; navigator: prefsNavigator } }
   Component { id: displayPage; DisplaysPage { query: root.query } }
   Component { id: hardwarePage; HardwarePage { query: root.query; navigator: prefsNavigator } }
   Component { id: driversPage; DriversPage { query: root.query } }
@@ -244,6 +356,8 @@ ShellRoot {
 
   readonly property var pageById: ({
     ask: askPage,
+    home: homePage,
+    monitor: monitorPage,
     favorites: favoritesPage,
     appearance: appearancePage,
     display: displayPage,
@@ -504,8 +618,11 @@ ShellRoot {
               root.query = text
               root.syncSearchPane()
             }
-            Keys.onEscapePressed: {
-              if (text.length > 0) text = ""
+            Keys.onEscapePressed: function(event) {
+              // Blur first so the filter stays. The window Escape shortcut
+              // clears it on the next press.
+              searchField.focus = false
+              event.accepted = true
             }
 
             Text {
@@ -645,9 +762,8 @@ ShellRoot {
                       elide: Text.ElideRight
                     }
 
-                    // Live state at the edge of the row. Silent when there
-                    // is nothing to say, which is the common case: a row
-                    // with no badge renders exactly as it does today.
+                    // Live state at the row edge. Silent when there is
+                    // nothing to say, which is the common case.
                     Text {
                       id: navBadge
                       anchors.right: parent.right
@@ -657,12 +773,7 @@ ShellRoot {
                         modelData ? modelData.id : "", root.navState)
                       visible: !!badge
                       text: badge ? badge.text : ""
-                      color: {
-                        if (!badge) return Theme.muted
-                        if (badge.tone === "warn") return Theme.warn
-                        if (badge.tone === "ok") return Theme.ok
-                        return Theme.muted
-                      }
+                      color: badge && badge.tone === "warn" ? Theme.urgent : Theme.muted
                       font.family: Theme.fontFamily
                       font.pixelSize: Theme.badgeSize
                       Accessible.role: Accessible.StaticText
@@ -700,14 +811,19 @@ ShellRoot {
 
     Item {
       id: rightPane
+      readonly property bool atmosRightPane: true
       anchors.left: divider.right
       anchors.right: parent.right
       anchors.top: parent.top
       anchors.bottom: parent.bottom
 
+      PrefsGuardBar {
+        id: guardBar
+      }
+
       Item {
         id: header
-        anchors.top: parent.top
+        anchors.top: guardBar.bottom
         anchors.left: parent.left
         anchors.right: parent.right
         height: pageStack.depth > 1 ? 48 : 0
@@ -794,11 +910,12 @@ ShellRoot {
         }
 
         Component.onCompleted: {
-          var hub = root.hubId(root.launchPath)
+          var launched = root.canonicalHub(root.launchPath)
+          var hub = root.hubId(launched)
           if (!hub) hub = "appearance"
           root.currentPage = hub
           pageStack.push(root.pageComponent(hub), {}, StackView.Immediate)
-          var sub = root.subId(root.launchPath)
+          var sub = launched === root.launchPath ? root.subId(root.launchPath) : ""
           if (sub.length > 0) {
             Qt.callLater(function() {
               if (pageStack.currentItem && pageStack.currentItem.openSubpage)
@@ -864,40 +981,6 @@ ShellRoot {
       }
     }
 
-    // A second Atmos is refused, and told why. Quitting silently would look
-    // like a crash; continuing would let two windows race over the same
-    // config files.
-    Connections {
-      target: Omarchy
-      function onLostInstanceLockChanged() {
-        if (Omarchy.lostInstanceLock) secondInstanceDialog.open()
-      }
-    }
-
-    PrefsDialog {
-      id: secondInstanceDialog
-      title: "Atmos is already open"
-      closePolicy: Popup.NoAutoClose
-
-      PrefsText {
-        width: parent.width
-        text: "Another Atmos is running on this machine. Two of them would write the same configuration files at the same time, and whichever finished second would quietly overwrite the other, so this one will close.\n\nSwitch to the window that is already open."
-        color: Theme.foreground
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.labelSize
-        wrapMode: Text.WordWrap
-      }
-
-      Row {
-        anchors.right: parent.right
-        PrefsButton {
-          text: "Close this one"
-          primary: true
-          onClicked: Qt.quit()
-        }
-      }
-    }
-
     // A keyboard-first app has to teach its own keys rather than send you
     // to a README.
     PrefsDialog {
@@ -907,39 +990,41 @@ ShellRoot {
 
       Repeater {
         model: [
-          { keys: "j  /  k", what: "Move down and up the sidebar" },
-          { keys: "g  /  G", what: "Jump to the first or last hub" },
-          { keys: "/", what: "Search settings" },
-          { keys: "Enter", what: "Open or toggle what is focused" },
+          { keys: "A letter", what: "Search settings" },
+          { keys: "Up  /  Down", what: "Move through hubs or search hits" },
+          { keys: "Ctrl+J  /  Ctrl+K", what: "Move through hubs or search hits" },
+          { keys: "Ctrl+Shift+K", what: "Open Ask" },
+          { keys: "Home  /  End", what: "Jump to the first or last" },
+          { keys: "/  /  Ctrl+F", what: "Focus search" },
+          { keys: "Enter", what: "Open the highlighted hub or setting" },
           { keys: "Tab", what: "Move through controls on the page" },
-          { keys: "Escape", what: "Go back, or clear the search" },
-          { keys: "?", what: "This sheet" }
+          { keys: "Escape", what: "Revert a pending change, go back, or leave search" },
+          { keys: "Ctrl+/", what: "This sheet" }
         ]
         delegate: Item {
           required property var modelData
           width: parent ? parent.width : 0
           height: Theme.rowHeight
 
-          Text {
+          PrefsText {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            width: 120
+            width: Theme.spinWidth + Theme.spaceMd
             text: modelData.keys
             color: Theme.accent
             font.family: Theme.fontFamily
             font.pixelSize: Theme.labelSize
             font.bold: true
           }
-          Text {
+          PrefsText {
             anchors.left: parent.left
-            anchors.leftMargin: 130
+            anchors.leftMargin: Theme.spinWidth + Theme.spaceLg
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             text: modelData.what
             color: Theme.foreground
             font.family: Theme.fontFamily
             font.pixelSize: Theme.labelSize
-            elide: Text.ElideRight
           }
         }
       }
@@ -1033,44 +1118,37 @@ ShellRoot {
       }
     }
 
+    Item {
+      Component.onCompleted: {
+        var item = window.contentItem
+        if (!item) return
+        item.Keys.priority = Keys.BeforeItem
+        item.Keys.pressed.connect(function(event) { root.startSearch(event) })
+      }
+    }
+
     Shortcut {
       sequences: ["Ctrl+F", "/"]
+      enabled: !root.modalOpen
       onActivated: searchField.forceActiveFocus()
     }
 
-    // Atmos's audience runs a tiling window manager and lives on the
-    // keyboard. Every binding is disabled while a text field has focus, so
-    // typing a j into search types a j.
     Shortcut {
-      sequences: ["J"]
-      enabled: !root.typing
-      onActivated: root.moveNav(1)
-    }
-    Shortcut {
-      sequences: ["K"]
-      enabled: !root.typing
-      onActivated: root.moveNav(-1)
-    }
-    Shortcut {
-      sequences: ["G"]
-      enabled: !root.typing
-      onActivated: root.jumpNav(false)
-    }
-    Shortcut {
-      sequences: ["Shift+G"]
-      enabled: !root.typing
-      onActivated: root.jumpNav(true)
-    }
-    Shortcut {
-      sequences: ["?"]
-      enabled: !root.typing
+      sequences: ["Ctrl+/"]
+      enabled: !root.modalOpen
       onActivated: keysDialog.open()
     }
 
-    // Ctrl+K for people who expect it, going to the same place the sidebar's
-    // first row goes. There is no second, hidden version of this feature.
+    // Letters belong to search. These move the list, including while the
+    // search field is focused. Another text field keeps its own keys.
     Shortcut {
-      sequences: ["Ctrl+K"]
+      sequences: ["Down", "Ctrl+J"]
+      enabled: root.listKeys
+      onActivated: root.moveList(1)
+    }
+    Shortcut {
+      sequences: ["Ctrl+Shift+K"]
+      enabled: !root.modalOpen
       onActivated: {
         root.currentPage = "ask"
         if (searchField.text.length > 0) searchField.text = ""
@@ -1079,8 +1157,39 @@ ShellRoot {
     }
 
     Shortcut {
+      sequences: ["Up", "Ctrl+K"]
+      enabled: root.listKeys
+      onActivated: root.moveList(-1)
+    }
+    Shortcut {
+      sequences: ["Home"]
+      enabled: root.listKeys
+      onActivated: root.jumpList(false)
+    }
+    Shortcut {
+      sequences: ["End"]
+      enabled: root.listKeys
+      onActivated: root.jumpList(true)
+    }
+    Shortcut {
+      sequences: ["Return", "Enter"]
+      enabled: root.listKeys && (searchField.activeFocus || !window.activeFocusItem || window.activeFocusItem === window.contentItem)
+      onActivated: root.activateList()
+    }
+
+    Shortcut {
       sequences: ["Escape"]
       onActivated: {
+        if (Omarchy.guardOpen) {
+          Omarchy.revertGuard()
+          return
+        }
+        var page = pageStack.currentItem
+        if (page && page.chartOpen) {
+          if (page.zoomOutChart && page.zoomOutChart()) return
+          page.collapseChart()
+          return
+        }
         if (pageStack.depth > 1) pageStack.pop()
         else if (searchField.text.length > 0) searchField.text = ""
       }

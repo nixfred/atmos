@@ -64,7 +64,6 @@ PrefsPage {
 
     SettingRow {
       label: "Acceleration"
-      advanced: true
       description: "Adaptive speeds up as you move. Flat keeps a steady ratio."
       hint: "~/.config/hypr/input.lua · input.accel_profile"
       query: root.query
@@ -86,7 +85,6 @@ PrefsPage {
 
     SettingRow {
       label: "Scroll inertia"
-      advanced: true
       description: "How a high-resolution or free-spin mouse wheel is turned into scroll events. Smooth keeps the fine motion. Stepped turns it into clicks."
       hint: "~/.config/hypr/input.lua · input.emulate_discrete_scroll"
       query: root.query
@@ -178,7 +176,6 @@ PrefsPage {
 
     SettingRow {
       label: "Three-finger drag"
-      advanced: true
       description: "Three fingers down and moving drags, like a click-and-hold."
       hint: "~/.config/hypr/input.lua · input.touchpad.drag_3fg"
       query: root.query
@@ -274,7 +271,10 @@ PrefsPage {
 
   PrefsGroup {
     title: "Advanced"
+    advanced: true
     query: root.query
+    writesFile: "~/.config/hypr/input.lua"
+    writesNote: Omarchy.hyprWorkspaceGestureUnmanaged ? "your gesture stays" : ""
     detail: "Follow mouse, waking the screen, an optional Hyprland layout list, and a three-finger workspace swipe."
 
     SettingRow {

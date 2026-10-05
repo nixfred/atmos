@@ -1,5 +1,7 @@
 import QtQuick
+import QtQuick.Window
 import "../services"
+import "../services/Chamfer.js" as ChamferJs
 
 // A chamfered panel: corners cut at 45 degrees rather than rounded.
 //
@@ -38,45 +40,46 @@ Item {
   Canvas {
     id: canvas
     anchors.fill: parent
+    antialiasing: true
+    readonly property real dpr: {
+      var win = Window.window
+      if (win && win.devicePixelRatio > 0) return win.devicePixelRatio
+      if (typeof Screen !== "undefined" && Screen.devicePixelRatio > 0) return Screen.devicePixelRatio
+      return 1
+    }
     onWidthChanged: requestPaint()
     onHeightChanged: requestPaint()
+    onDprChanged: requestPaint()
 
     onPaint: {
       var ctx = getContext("2d")
       ctx.reset()
       var w = width
       var h = height
-      if (w <= 0 || h <= 0) return
-
-      // Inset by half the stroke so the hairline lands on the pixel grid
-      // instead of straddling it and rendering as a soft two-pixel smear.
-      var s = root.strokeWidth
-      var o = s > 0 ? s / 2 : 0
-      var c = Math.max(0, Math.min(root.cut, Math.min(w, h) / 2 - o))
-
-      var l = o
-      var t = o
-      var r = w - o
-      var b = h - o
+      var pts = ChamferJs.pathPoints(w, h, root.cut, {
+        cutTopLeft: root.cutTopLeft,
+        cutTopRight: root.cutTopRight,
+        cutBottomRight: root.cutBottomRight,
+        cutBottomLeft: root.cutBottomLeft
+      }, root.strokeWidth, dpr)
+      if (pts.length === 0) return
 
       ctx.beginPath()
-      ctx.moveTo(l + (root.cutTopLeft ? c : 0), t)
-      ctx.lineTo(r - (root.cutTopRight ? c : 0), t)
-      if (root.cutTopRight) ctx.lineTo(r, t + c)
-      ctx.lineTo(r, b - (root.cutBottomRight ? c : 0))
-      if (root.cutBottomRight) ctx.lineTo(r - c, b)
-      ctx.lineTo(l + (root.cutBottomLeft ? c : 0), b)
-      if (root.cutBottomLeft) ctx.lineTo(l, b - c)
-      ctx.lineTo(l, t + (root.cutTopLeft ? c : 0))
+      ctx.moveTo(pts[0][0], pts[0][1])
+      var i
+      for (i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1])
       ctx.closePath()
+      ctx.lineJoin = "miter"
+      ctx.miterLimit = 2
 
-      if (Qt.colorEqual(root.fillColor, "transparent") === false) {
-        ctx.fillStyle = root.fillColor
+      if (ChamferJs.shouldPaint(root.fillColor)) {
+        ctx.fillStyle = ChamferJs.cssColor(root.fillColor)
         ctx.fill()
       }
-      if (s > 0 && Qt.colorEqual(root.strokeColor, "transparent") === false) {
-        ctx.lineWidth = s
-        ctx.strokeStyle = root.strokeColor
+      var metrics = ChamferJs.strokeMetrics(root.strokeWidth, dpr)
+      if (metrics.width > 0 && ChamferJs.shouldPaint(root.strokeColor)) {
+        ctx.lineWidth = metrics.width
+        ctx.strokeStyle = ChamferJs.cssColor(root.strokeColor)
         ctx.stroke()
       }
     }
